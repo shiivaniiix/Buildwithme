@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 interface Roadmap {
@@ -297,7 +296,6 @@ export default function RoadmapPage({
   if (!roadmap) {
     return (
       <main className="min-h-screen code-pattern relative">
-        <Navbar />
         <div className="relative z-10 max-w-7xl mx-auto px-6 py-32">
           <div className="glass-strong rounded-2xl p-8 shadow-soft-xl text-center">
             <h1 className="text-2xl font-bold mb-4 text-white">Roadmap Not Found</h1>
@@ -317,8 +315,6 @@ export default function RoadmapPage({
 
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-4xl mx-auto px-6 py-32">
         {/* Header */}
         <header className="mb-8">

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 type ProfileSection = "profile" | "account" | "security" | "preferences" | "danger";
@@ -152,8 +151,6 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-32">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Sidebar */}

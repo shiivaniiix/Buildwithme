@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "framer-motion";
-import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import WhatIsSection from "@/components/WhatIsSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
@@ -25,9 +24,6 @@ export default function Home() {
       initial="initial"
       animate="animate"
     >
-      {/* Navigation Bar */}
-      <Navbar />
-
       {/* All sections have their own scroll-triggered animations via useInView */}
       <div className="relative z-10">
         <HeroSection />

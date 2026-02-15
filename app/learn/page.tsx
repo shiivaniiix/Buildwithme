@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 // Roadmap data structure
@@ -408,8 +407,6 @@ export default function LearnPage() {
 
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-32">
         <header className="mb-12">
           <h1 className="text-4xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">

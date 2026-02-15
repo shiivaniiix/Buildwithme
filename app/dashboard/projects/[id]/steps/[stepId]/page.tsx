@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSteps, type Step, updateStepDescription } from "@/lib/steps";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 
@@ -51,7 +50,6 @@ export default function StepDetailPage({
   if (!step) {
     return (
       <main className="min-h-screen code-pattern relative">
-        <Navbar />
         <div className="relative z-10 max-w-4xl mx-auto px-6 py-32 text-white">
           <p className="mb-4">Step not found</p>
           <Link
@@ -68,8 +66,6 @@ export default function StepDetailPage({
 
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-4xl mx-auto px-6 py-32">
         <Link
           href={`/dashboard/projects/${params.id}`}

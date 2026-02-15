@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState, useMemo } from "react";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { getAllNotes, getNotesByType, getNotesByTopic, getNotesByProject, deleteNote, type Note, type NoteType } from "@/lib/notes";
 import { getProjects } from "@/lib/projects";
@@ -78,8 +77,6 @@ export default function NotesPage() {
 
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-32">
         {/* Header */}
         <header className="mb-8">

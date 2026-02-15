@@ -1,14 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 export default function HTMLCSSNotesPage() {
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-4xl mx-auto px-6 py-32">
         <Link
           href="/learn"

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 /**
@@ -10,9 +9,6 @@ import Footer from "@/components/Footer";
 export default function SignupPage() {
   return (
     <main className="min-h-screen code-pattern relative">
-      {/* Navigation Bar */}
-      <Navbar />
-
       {/* Content */}
       <div className="relative z-10 min-h-screen flex items-center justify-center px-6 py-32">
         <div className="w-full max-w-md">

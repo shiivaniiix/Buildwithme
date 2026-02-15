@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { 
   getSortedProjects,
@@ -178,8 +177,6 @@ export default function ShareProjectPage() {
 
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-4xl mx-auto px-6 py-32">
         {/* Header */}
         <header className="mb-8">

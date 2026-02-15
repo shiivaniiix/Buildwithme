@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { createNote, type NoteType } from "@/lib/notes";
 import { getProjects } from "@/lib/projects";
@@ -137,8 +136,6 @@ export default function TakeNotesPage() {
 
   return (
     <main className="min-h-screen code-pattern relative">
-      <Navbar />
-
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-32">
         {/* Header with Back Button */}
         <header className="mb-8">
