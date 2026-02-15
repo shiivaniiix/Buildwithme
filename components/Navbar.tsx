@@ -50,6 +50,11 @@ export default function Navbar() {
           {/* Navigation Links */}
           <div className="flex items-center gap-6">
             <motion.div whileHover={{ y: -2 }} whileTap={{ y: 0 }}>
+              <Link href="/CodeGraph" className="text-gray-400 hover:text-cyan-400 transition-colors">
+                CodeGraph
+              </Link>
+            </motion.div>
+            <motion.div whileHover={{ y: -2 }} whileTap={{ y: 0 }}>
               <Link href="/learn" className="text-gray-400 hover:text-cyan-400 transition-colors">
                 Learn
               </Link>
