@@ -155,3 +155,4 @@ export function detectTechnologies(files: string[]): DetectedTechnology[] {
   return technologies;
 }
 
+

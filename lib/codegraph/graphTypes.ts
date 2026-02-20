@@ -25,3 +25,4 @@ export interface DetectedTechnology {
   category: "language" | "framework" | "runtime" | "tooling";
 }
 
+
