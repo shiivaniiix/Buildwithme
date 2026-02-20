@@ -21,6 +21,8 @@ async function fetchGitHubFiles(
 
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
   
+  console.log("GitHub API URL:", apiUrl);
+  
   try {
     const response = await fetch(apiUrl, {
       headers: {
@@ -29,14 +31,18 @@ async function fetchGitHubFiles(
       },
     });
 
+    console.log("Status:", response.status);
+
     if (!response.ok) {
       if (response.status === 404) {
+        console.log(`Path ${path} not found (404)`);
         return files; // Path doesn't exist, return empty
       }
       throw new Error(`GitHub API error: ${response.status}`);
     }
 
     const items = await response.json();
+    console.log("Response JSON:", JSON.stringify(items, null, 2));
     
     // Handle single file response
     if (items.type === "file") {
@@ -70,6 +76,7 @@ async function fetchGitHubFiles(
 
     // Handle directory response
     if (Array.isArray(items)) {
+      console.log(`Processing directory with ${items.length} items`);
       for (const item of items) {
         if (files.length >= maxFiles) break;
 
@@ -77,14 +84,22 @@ async function fetchGitHubFiles(
         const shouldIgnore = ignoredDirs.some(ignored => 
           item.name === ignored || item.name.startsWith(ignored)
         );
-        if (shouldIgnore) continue;
+        if (shouldIgnore) {
+          console.log(`Ignoring item: ${item.name} (matches ignored dirs)`);
+          continue;
+        }
 
         if (item.type === "file") {
           // Check file size
-          if (item.size > maxFileSize) continue;
+          if (item.size > maxFileSize) {
+            console.log(`Skipping file ${item.name}: size ${item.size} exceeds max ${maxFileSize}`);
+            continue;
+          }
 
           // Fetch file content using download_url
           const filePath = path ? `${path}/${item.name}` : item.name;
+          
+          console.log(`Processing file: ${filePath} (type: ${item.type}, size: ${item.size})`);
           
           if (!item.download_url) {
             console.warn(`No download URL for file ${filePath}`);
@@ -104,6 +119,7 @@ async function fetchGitHubFiles(
                 name: filePath,
                 content,
               });
+              console.log(`Successfully fetched file: ${filePath} (${content.length} chars)`);
             } else {
               console.warn(`Failed to fetch file ${filePath}: ${fileResponse.status}`);
             }
@@ -114,6 +130,7 @@ async function fetchGitHubFiles(
         } else if (item.type === "dir") {
           // Recursively fetch directory contents
           const dirPath = path ? `${path}/${item.name}` : item.name;
+          console.log(`Recursively fetching directory: ${dirPath}`);
           const dirFiles = await fetchGitHubFiles(
             owner,
             repo,
@@ -123,6 +140,7 @@ async function fetchGitHubFiles(
             maxFiles,
             maxFileSize
           );
+          console.log(`Found ${dirFiles.length} files in directory ${dirPath}`);
           files.push(...dirFiles);
         }
       }
@@ -232,12 +250,18 @@ export async function POST(request: NextRequest) {
       maxFileSize
     );
 
+    console.log("Extracted file paths:", files.map(f => f.name));
+    console.log("Total files found:", files.length);
+
     if (files.length === 0) {
+      console.log("Filtered valid files: [] (no files found)");
       return NextResponse.json(
         { error: "No valid files found in repository. Make sure the repository contains code files." },
         { status: 400 }
       );
     }
+
+    console.log("Filtered valid files:", files.map(f => ({ name: f.name, size: f.content.length })));
 
     // Detect project language from file extensions
     const detectedLanguage = detectProjectLanguage(files);
