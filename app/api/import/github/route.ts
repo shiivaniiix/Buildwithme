@@ -153,9 +153,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate GitHub URL format
+    // Normalize URL: remove trailing .git, trailing /, and handle http/https
+    let normalizedUrl = repoUrl.trim();
+    // Remove trailing .git
+    normalizedUrl = normalizedUrl.replace(/\.git$/, "");
+    // Remove trailing /
+    normalizedUrl = normalizedUrl.replace(/\/$/, "");
+    // Normalize http to https (optional, but cleaner)
+    normalizedUrl = normalizedUrl.replace(/^http:\/\//, "https://");
+
+    // Validate GitHub URL format and extract owner/repo
     const githubUrlRegex = /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)(?:\/.*)?$/;
-    const match = repoUrl.match(githubUrlRegex);
+    const match = normalizedUrl.match(githubUrlRegex);
     
     if (!match) {
       return NextResponse.json(
@@ -165,7 +174,10 @@ export async function POST(request: NextRequest) {
     }
 
     const [, owner, repo] = match;
-    const repoName = repo.replace(/\.git$/, ""); // Remove .git suffix if present
+    const repoName = repo; // Already normalized, no .git suffix
+    
+    console.log("Owner:", owner);
+    console.log("Repo:", repoName);
 
     // Fetch repository metadata to verify it's public
     const repoInfoUrl = `https://api.github.com/repos/${owner}/${repoName}`;
