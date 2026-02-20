@@ -5,9 +5,15 @@ import type { CodeGraph } from "@/lib/codegraph/graphTypes";
 import { getSortedProjects, type Project } from "@/lib/projects";
 import { getProjectFiles } from "@/lib/projectFiles";
 
+type SourceType = "internal" | "github" | "local";
+
 export default function CodeGraphPage() {
+  const [sourceType, setSourceType] = useState<SourceType>("internal");
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [localFiles, setLocalFiles] = useState<FileList | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<string>("");
   const [graph, setGraph] = useState<CodeGraph | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -30,9 +36,13 @@ export default function CodeGraphPage() {
     console.log("Loaded projects:", loadedProjects);
   }, []);
 
-  const handleProjectSelect = (projectId: string) => {
-    setSelectedProjectId(projectId);
-    // Clear previous analysis when selecting new project
+  const handleSourceChange = (source: SourceType) => {
+    setSourceType(source);
+    // Clear all state when changing source
+    setSelectedProjectId("");
+    setGithubUrl("");
+    setLocalFiles(null);
+    setCurrentProjectId("");
     setGraph(null);
     setSummary(null);
     setArchitectureExplanation(null);
@@ -43,23 +53,110 @@ export default function CodeGraphPage() {
     setAskError(null);
   };
 
+  const handleProjectSelect = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    // Clear previous analysis when selecting new project
+    setCurrentProjectId("");
+    setGraph(null);
+    setSummary(null);
+    setArchitectureExplanation(null);
+    setTechnologies([]);
+    setAnswer(null);
+    setAnalysisError(null);
+    setExplainError(null);
+    setAskError(null);
+  };
+
+  const handleLocalFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    setLocalFiles(files);
+    // Clear previous analysis
+    setGraph(null);
+    setSummary(null);
+    setArchitectureExplanation(null);
+    setTechnologies([]);
+    setAnswer(null);
+    setAnalysisError(null);
+  };
+
   const handleAnalyze = async () => {
-    if (!selectedProjectId.trim()) {
-      setAnalysisError("Please select a project");
-      return;
+    let filePaths: string[] = [];
+    let projectIdForAnalysis = "";
+
+    // Handle different source types
+    if (sourceType === "internal") {
+      if (!selectedProjectId.trim()) {
+        setAnalysisError("Please select a project");
+        return;
+      }
+
+      // Load project files
+      const projectFiles = getProjectFiles(selectedProjectId);
+      if (projectFiles.length === 0) {
+        setAnalysisError("Selected project has no files");
+        return;
+      }
+
+      // Extract file paths (just file names, not content)
+      filePaths = projectFiles
+        .filter(file => !file.isFolder) // Exclude folders
+        .map(file => file.name);
+      projectIdForAnalysis = selectedProjectId;
+    } else if (sourceType === "github") {
+      if (!githubUrl.trim()) {
+        setAnalysisError("Please enter a GitHub repository URL");
+        return;
+      }
+
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+      setGraph(null);
+      setSummary(null);
+      setArchitectureExplanation(null);
+      setTechnologies([]);
+      setAnswer(null);
+
+      try {
+        // Import from GitHub
+        const importResponse = await fetch("/api/import/github", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repoUrl: githubUrl.trim(), branch: "main" }),
+        });
+
+        if (!importResponse.ok) {
+          const error = await importResponse.json();
+          throw new Error(error.error || "Failed to import from GitHub");
+        }
+
+        const importData = await importResponse.json();
+        // Extract file paths from response
+        filePaths = importData.project.files.map((file: { name: string; content: string }) => file.name);
+        projectIdForAnalysis = `github-${Date.now()}`;
+      } catch (error) {
+        setAnalysisError(error instanceof Error ? error.message : "Unknown error");
+        setIsAnalyzing(false);
+        return;
+      }
+    } else if (sourceType === "local") {
+      if (!localFiles || localFiles.length === 0) {
+        setAnalysisError("Please select a folder");
+        return;
+      }
+
+      // Extract relative paths from FileList
+      filePaths = Array.from(localFiles).map(file => {
+        // Get relative path from webkitRelativePath
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        return relativePath;
+      });
+      projectIdForAnalysis = `local-${Date.now()}`;
     }
 
-    // Load project files
-    const projectFiles = getProjectFiles(selectedProjectId);
-    if (projectFiles.length === 0) {
-      setAnalysisError("Selected project has no files");
+    if (filePaths.length === 0) {
+      setAnalysisError("No files found to analyze");
       return;
     }
-
-    // Extract file paths (just file names, not content)
-    const filePaths = projectFiles
-      .filter(file => !file.isFolder) // Exclude folders
-      .map(file => file.name);
 
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -73,7 +170,7 @@ export default function CodeGraphPage() {
       const response = await fetch("/api/codegraph/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: selectedProjectId, files: filePaths }),
+        body: JSON.stringify({ projectId: projectIdForAnalysis, files: filePaths }),
       });
 
       if (!response.ok) {
@@ -83,6 +180,7 @@ export default function CodeGraphPage() {
 
       const data = await response.json();
       setGraph(data.graph);
+      setCurrentProjectId(projectIdForAnalysis);
 
       // Automatically fetch explanation
       await handleExplain(data.graph);
@@ -95,7 +193,7 @@ export default function CodeGraphPage() {
 
   const handleExplain = async (graphToExplain?: CodeGraph) => {
     const graphToUse = graphToExplain || graph;
-    if (!graphToUse || !selectedProjectId.trim()) return;
+    if (!graphToUse || !currentProjectId) return;
 
     setIsExplaining(true);
     setExplainError(null);
@@ -104,7 +202,7 @@ export default function CodeGraphPage() {
       const response = await fetch("/api/codegraph/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: selectedProjectId.trim(), graph: graphToUse }),
+        body: JSON.stringify({ projectId: currentProjectId, graph: graphToUse }),
       });
 
       if (!response.ok) {
@@ -129,7 +227,7 @@ export default function CodeGraphPage() {
       return;
     }
 
-    if (!graph || !selectedProjectId.trim()) {
+    if (!graph || !currentProjectId) {
       setAskError("Please analyze a project first");
       return;
     }
@@ -142,7 +240,7 @@ export default function CodeGraphPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectId: selectedProjectId.trim(),
+          projectId: currentProjectId,
           graph,
           question: question.trim(),
         }),
@@ -232,26 +330,107 @@ export default function CodeGraphPage() {
               <h2 className="text-2xl font-bold mb-6 text-white">Analyze Project</h2>
               
               <div className="space-y-4">
+                {/* Source Selection */}
                 <div>
-                  <label htmlFor="project-select" className="block text-sm font-medium text-gray-300 mb-2">Select Project</label>
-                  <select
-                    id="project-select"
-                    value={selectedProjectId}
-                    onChange={(e) => handleProjectSelect(e.target.value)}
-                    className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white bg-gray-900/50 focus:border-cyan-400 focus:outline-none"
-                  >
-                    <option value="" className="text-white bg-gray-900">-- Select a project --</option>
-                    {projects.map(project => (
-                      <option key={project.id} value={project.id} className="text-white bg-gray-900">{project.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-gray-300 mb-3">Source</label>
+                  <div className="flex gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="source"
+                        value="internal"
+                        checked={sourceType === "internal"}
+                        onChange={(e) => handleSourceChange(e.target.value as SourceType)}
+                        className="w-4 h-4 text-cyan-500 focus:ring-cyan-500 focus:ring-2"
+                      />
+                      <span className="text-gray-300">Internal Project</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="source"
+                        value="github"
+                        checked={sourceType === "github"}
+                        onChange={(e) => handleSourceChange(e.target.value as SourceType)}
+                        className="w-4 h-4 text-cyan-500 focus:ring-cyan-500 focus:ring-2"
+                      />
+                      <span className="text-gray-300">GitHub Repository</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="source"
+                        value="local"
+                        checked={sourceType === "local"}
+                        onChange={(e) => handleSourceChange(e.target.value as SourceType)}
+                        className="w-4 h-4 text-cyan-500 focus:ring-cyan-500 focus:ring-2"
+                      />
+                      <span className="text-gray-300">Local Folder</span>
+                    </label>
+                  </div>
                 </div>
+
+                {/* Internal Project Mode */}
+                {sourceType === "internal" && (
+                  <div>
+                    <label htmlFor="project-select" className="block text-sm font-medium text-gray-300 mb-2">Select Project</label>
+                    <select
+                      id="project-select"
+                      value={selectedProjectId}
+                      onChange={(e) => handleProjectSelect(e.target.value)}
+                      className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white bg-gray-900/50 focus:border-cyan-400 focus:outline-none"
+                    >
+                      <option value="" className="text-white bg-gray-900">-- Select a project --</option>
+                      {projects.map(project => (
+                        <option key={project.id} value={project.id} className="text-white bg-gray-900">{project.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* GitHub Mode */}
+                {sourceType === "github" && (
+                  <div>
+                    <label htmlFor="github-url" className="block text-sm font-medium text-gray-300 mb-2">GitHub Repository URL</label>
+                    <input
+                      id="github-url"
+                      type="text"
+                      value={githubUrl}
+                      onChange={(e) => setGithubUrl(e.target.value)}
+                      className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
+                      placeholder="https://github.com/user/repo"
+                    />
+                  </div>
+                )}
+
+                {/* Local Folder Mode */}
+                {sourceType === "local" && (
+                  <div>
+                    <label htmlFor="local-folder" className="block text-sm font-medium text-gray-300 mb-2">Select Folder</label>
+                    <input
+                      id="local-folder"
+                      type="file"
+                      {...({ webkitdirectory: "" } as any)}
+                      multiple
+                      onChange={handleLocalFolderSelect}
+                      className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-500 file:text-white hover:file:bg-cyan-600 focus:border-cyan-400 focus:outline-none"
+                    />
+                    {localFiles && localFiles.length > 0 && (
+                      <p className="mt-2 text-sm text-gray-400">{localFiles.length} file(s) selected</p>
+                    )}
+                  </div>
+                )}
 
                 {analysisError && <div className="px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">{analysisError}</div>}
 
                 <button
                   onClick={handleAnalyze}
-                  disabled={isAnalyzing || !selectedProjectId}
+                  disabled={
+                    isAnalyzing ||
+                    (sourceType === "internal" && !selectedProjectId) ||
+                    (sourceType === "github" && !githubUrl.trim()) ||
+                    (sourceType === "local" && (!localFiles || localFiles.length === 0))
+                  }
                   className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAnalyzing ? "Analyzing..." : "Analyze Project"}
