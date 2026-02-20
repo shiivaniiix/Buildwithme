@@ -45,6 +45,29 @@ export function detectLanguageFromExtension(fileName: string): string | undefine
     sh: "shell",
     bash: "shell",
     zsh: "shell",
+    // Scala
+    scala: "scala",
+    // Kotlin
+    kt: "kotlin",
+    kts: "kotlin",
+    // Rust
+    rs: "rust",
+    // Go
+    go: "go",
+    // PHP
+    php: "php",
+    // Swift
+    swift: "swift",
+    // Ruby
+    rb: "ruby",
+    // Objective-C
+    m: "objective-c",
+    // C#
+    cs: "csharp",
+    // F#
+    fs: "fsharp",
+    // Gradle (build tool)
+    gradle: "gradle",
   };
 
   return languageMap[ext];

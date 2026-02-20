@@ -75,6 +75,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Extract fileSummaries from body if provided
+    const { fileSummaries } = body;
+
     // Get OpenAI API key
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -86,20 +89,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Build system prompt
-    const systemPrompt = `You are an architecture analyst. You must ONLY analyze the provided graph JSON. Do not assume unseen files or structure.
+    const systemPrompt = `You are an architecture analyst. Analyze the provided graph JSON and file summaries.
 
 Rules:
-- Analyze ONLY the graph structure provided
+- Analyze the graph structure provided
+- Use file summaries to understand actual functionality when available
 - Do not invent or assume files that are not in the graph
-- Do not reference code content (you don't have access to it)
-- Focus on structure, organization, and technology stack
-- Provide clear, concise explanations
-- Identify architectural patterns from the graph structure
+- Focus on structure, organization, technology stack, and actual code functionality
+- Provide clear, concise explanations based on both structure and content
+- Identify architectural patterns from the graph structure and code content
 
 Output format (JSON):
 {
-  "summary": "Brief overview of the project structure",
-  "architectureExplanation": "Detailed explanation of the architecture and organization",
+  "summary": "Brief overview of the project structure and functionality",
+  "architectureExplanation": "Detailed explanation of the architecture, organization, and how the code works",
   "technologies": [
     {
       "name": "Technology name",
@@ -108,20 +111,29 @@ Output format (JSON):
   ]
 }`;
 
-    // Build user prompt with graph data
-    const userPrompt = `Analyze this code graph and provide an architecture explanation.
+    // Build user prompt with graph data and file summaries
+    let userPrompt = `Analyze this code graph and provide an architecture explanation.
 
 Project ID: ${projectId}
 Generated at: ${new Date(graph.generatedAt).toISOString()}
 
 Graph Structure:
-${JSON.stringify(graph, null, 2)}
+${JSON.stringify(graph, null, 2)}`;
 
-Provide a comprehensive analysis of:
+    // Add file summaries if available
+    if (fileSummaries && typeof fileSummaries === "object" && Object.keys(fileSummaries).length > 0) {
+      userPrompt += `\n\nKey File Content:\n`;
+      for (const [filePath, content] of Object.entries(fileSummaries)) {
+        userPrompt += `\n--- ${filePath} ---\n${content}\n`;
+      }
+    }
+
+    userPrompt += `\n\nProvide a comprehensive analysis of:
 1. Project structure and organization
 2. Technology stack and how technologies are used
-3. Architectural patterns visible in the graph
-4. File organization and hierarchy`;
+3. Architectural patterns visible in the graph and code
+4. File organization and hierarchy
+5. Actual functionality based on the code content (when available)`;
 
     // Call OpenAI API
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {

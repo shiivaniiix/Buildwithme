@@ -121,7 +121,7 @@ export default function CodeGraphPage() {
         const importResponse = await fetch("/api/import/github", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repoUrl: githubUrl.trim(), branch: "main" }),
+          body: JSON.stringify({ repoUrl: githubUrl.trim() }),
         });
 
         if (!importResponse.ok) {
@@ -131,8 +131,35 @@ export default function CodeGraphPage() {
 
         const importData = await importResponse.json();
         // Extract file paths from response
-        filePaths = importData.project.files.map((file: { name: string; content: string }) => file.name);
+        filePaths = importData.filePaths || importData.project.files.map((file: { name: string; content: string }) => file.name);
+        const fileSummaries = importData.fileSummaries || {};
         projectIdForAnalysis = `github-${Date.now()}`;
+        
+        // Send to analyze endpoint with file summaries
+        const analyzeResponse = await fetch("/api/codegraph/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            projectId: projectIdForAnalysis, 
+            files: filePaths,
+            fileSummaries 
+          }),
+        });
+
+        if (!analyzeResponse.ok) {
+          const error = await analyzeResponse.json();
+          throw new Error(error.error || "Failed to analyze project");
+        }
+
+        const analyzeData = await analyzeResponse.json();
+        setGraph(analyzeData.graph);
+        setCurrentProjectId(projectIdForAnalysis);
+
+        // Automatically fetch explanation with file summaries
+        await handleExplain(analyzeData.graph, fileSummaries);
+        
+        setIsAnalyzing(false);
+        return;
       } catch (error) {
         setAnalysisError(error instanceof Error ? error.message : "Unknown error");
         setIsAnalyzing(false);
@@ -191,7 +218,7 @@ export default function CodeGraphPage() {
     }
   };
 
-  const handleExplain = async (graphToExplain?: CodeGraph) => {
+  const handleExplain = async (graphToExplain?: CodeGraph, fileSummaries?: Record<string, string>) => {
     const graphToUse = graphToExplain || graph;
     if (!graphToUse || !currentProjectId) return;
 
@@ -202,7 +229,11 @@ export default function CodeGraphPage() {
       const response = await fetch("/api/codegraph/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: currentProjectId, graph: graphToUse }),
+        body: JSON.stringify({ 
+          projectId: currentProjectId, 
+          graph: graphToUse,
+          fileSummaries: fileSummaries || {}
+        }),
       });
 
       if (!response.ok) {

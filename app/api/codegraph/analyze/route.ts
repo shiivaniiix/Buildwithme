@@ -10,7 +10,7 @@ import { saveSnapshot } from "@/lib/codegraph/snapshotManager";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, files } = body;
+    const { projectId, files, fileSummaries } = body;
 
     // Validate required fields
     if (!projectId || typeof projectId !== "string") {
@@ -48,10 +48,11 @@ export async function POST(request: NextRequest) {
     // Save snapshot
     saveSnapshot(projectId, graph);
 
-    // Return graph
+    // Return graph with optional file summaries
     return NextResponse.json({
       success: true,
       graph,
+      fileSummaries: fileSummaries || {},
     });
   } catch (error) {
     console.error("Error analyzing project:", error);

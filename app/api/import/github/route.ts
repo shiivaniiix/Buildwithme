@@ -260,6 +260,48 @@ export async function POST(request: NextRequest) {
 
       console.log("Filtered valid files:", files.map(f => ({ name: f.name, size: f.content.length })));
 
+      // Identify key files for content analysis
+      const keyFilePatterns = [
+        "index.html", "app.js", "main.js", "server.js", "App.java", "Main.java",
+        "package.json", "pom.xml", "build.gradle"
+      ];
+      
+      const filePaths = files.map(f => f.name);
+      const fileSummaries: Record<string, string> = {};
+      
+      // Fetch content for key files only
+      for (const filePath of filePaths) {
+        const fileName = filePath.split("/").pop() || filePath;
+        const isKeyFile = keyFilePatterns.some(pattern => 
+          fileName.toLowerCase() === pattern.toLowerCase() || 
+          filePath.toLowerCase().endsWith(pattern.toLowerCase())
+        );
+        
+        if (isKeyFile) {
+          try {
+            // Find the file in the files array
+            const file = files.find(f => f.name === filePath);
+            if (file) {
+              const content = file.content;
+              const sizeKB = content.length / 1024;
+              
+              if (sizeKB < 50) {
+                // Under 50KB: use entire content
+                fileSummaries[filePath] = content;
+              } else {
+                // Over 50KB: use first 300 lines
+                const lines = content.split("\n");
+                fileSummaries[filePath] = lines.slice(0, 300).join("\n") + "\n... (truncated, file too large)";
+              }
+              console.log(`Fetched content for key file: ${filePath} (${sizeKB.toFixed(2)}KB)`);
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch content for ${filePath}:`, error);
+            // Continue with other files if one fails
+          }
+        }
+      }
+
       // Detect project language from file extensions
       const detectedLanguage = detectProjectLanguage(files);
 
@@ -272,6 +314,8 @@ export async function POST(request: NextRequest) {
           language: detectedLanguage,
           files,
         },
+        filePaths,
+        fileSummaries,
       });
     } catch (error) {
       console.error("Error fetching repository info:", error);
