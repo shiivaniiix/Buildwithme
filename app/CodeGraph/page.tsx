@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
+import { getProjects, type Project } from "@/lib/projects";
+import { getProjectFiles } from "@/lib/projectFiles";
 
 export default function CodeGraphPage() {
-  const [projectId, setProjectId] = useState("");
-  const [filePaths, setFilePaths] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [graph, setGraph] = useState<CodeGraph | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -21,21 +23,42 @@ export default function CodeGraphPage() {
   const [isAsking, setIsAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
 
+  // Load projects on mount
+  useEffect(() => {
+    const loadedProjects = getProjects();
+    setProjects(loadedProjects);
+  }, []);
+
+  const handleProjectSelect = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    // Clear previous analysis when selecting new project
+    setGraph(null);
+    setSummary(null);
+    setArchitectureExplanation(null);
+    setTechnologies([]);
+    setAnswer(null);
+    setAnalysisError(null);
+    setExplainError(null);
+    setAskError(null);
+  };
+
   const handleAnalyze = async () => {
-    if (!projectId.trim()) {
-      setAnalysisError("Project ID is required");
+    if (!selectedProjectId.trim()) {
+      setAnalysisError("Please select a project");
       return;
     }
 
-    const files = filePaths
-      .split("\n")
-      .map(f => f.trim())
-      .filter(f => f.length > 0);
-
-    if (files.length === 0) {
-      setAnalysisError("At least one file path is required");
+    // Load project files
+    const projectFiles = getProjectFiles(selectedProjectId);
+    if (projectFiles.length === 0) {
+      setAnalysisError("Selected project has no files");
       return;
     }
+
+    // Extract file paths (just file names, not content)
+    const filePaths = projectFiles
+      .filter(file => !file.isFolder) // Exclude folders
+      .map(file => file.name);
 
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -49,7 +72,7 @@ export default function CodeGraphPage() {
       const response = await fetch("/api/codegraph/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: projectId.trim(), files }),
+        body: JSON.stringify({ projectId: selectedProjectId, files: filePaths }),
       });
 
       if (!response.ok) {
@@ -71,7 +94,7 @@ export default function CodeGraphPage() {
 
   const handleExplain = async (graphToExplain?: CodeGraph) => {
     const graphToUse = graphToExplain || graph;
-    if (!graphToUse || !projectId.trim()) return;
+    if (!graphToUse || !selectedProjectId.trim()) return;
 
     setIsExplaining(true);
     setExplainError(null);
@@ -80,7 +103,7 @@ export default function CodeGraphPage() {
       const response = await fetch("/api/codegraph/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: projectId.trim(), graph: graphToUse }),
+        body: JSON.stringify({ projectId: selectedProjectId.trim(), graph: graphToUse }),
       });
 
       if (!response.ok) {
@@ -105,7 +128,7 @@ export default function CodeGraphPage() {
       return;
     }
 
-    if (!graph || !projectId.trim()) {
+    if (!graph || !selectedProjectId.trim()) {
       setAskError("Please analyze a project first");
       return;
     }
@@ -118,7 +141,7 @@ export default function CodeGraphPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectId: projectId.trim(),
+          projectId: selectedProjectId.trim(),
           graph,
           question: question.trim(),
         }),
@@ -209,19 +232,25 @@ export default function CodeGraphPage() {
               
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="project-id" className="block text-sm font-medium text-gray-300 mb-2">Project ID</label>
-                  <input id="project-id" type="text" value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none" placeholder="Enter project ID" />
-                </div>
-                <div>
-                  <label htmlFor="file-paths" className="block text-sm font-medium text-gray-300 mb-2">File Paths (one per line)</label>
-                  <textarea id="file-paths" value={filePaths} onChange={(e) => setFilePaths(e.target.value)} className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none resize-none" placeholder="src/index.js&#10;src/components/App.jsx&#10;package.json" rows={8} />
+                  <label htmlFor="project-select" className="block text-sm font-medium text-gray-300 mb-2">Select Project</label>
+                  <select
+                    id="project-select"
+                    value={selectedProjectId}
+                    onChange={(e) => handleProjectSelect(e.target.value)}
+                    className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white bg-gray-900/50 focus:border-cyan-400 focus:outline-none"
+                  >
+                    <option value="">-- Select a project --</option>
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {analysisError && <div className="px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">{analysisError}</div>}
 
                 <button
                   onClick={handleAnalyze}
-                  disabled={isAnalyzing}
+                  disabled={isAnalyzing || !selectedProjectId}
                   className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAnalyzing ? "Analyzing..." : "Analyze Project"}
