@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
-import { getProjects, type Project } from "@/lib/projects";
+import { getSortedProjects, type Project } from "@/lib/projects";
 import { getProjectFiles } from "@/lib/projectFiles";
 
 export default function CodeGraphPage() {
@@ -25,8 +25,9 @@ export default function CodeGraphPage() {
 
   // Load projects on mount
   useEffect(() => {
-    const loadedProjects = getProjects();
+    const loadedProjects = getSortedProjects();
     setProjects(loadedProjects);
+    console.log("Loaded projects:", loadedProjects);
   }, []);
 
   const handleProjectSelect = (projectId: string) => {
@@ -239,9 +240,9 @@ export default function CodeGraphPage() {
                     onChange={(e) => handleProjectSelect(e.target.value)}
                     className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white bg-gray-900/50 focus:border-cyan-400 focus:outline-none"
                   >
-                    <option value="">-- Select a project --</option>
+                    <option value="" className="text-white bg-gray-900">-- Select a project --</option>
                     {projects.map(project => (
-                      <option key={project.id} value={project.id}>{project.name}</option>
+                      <option key={project.id} value={project.id} className="text-white bg-gray-900">{project.name}</option>
                     ))}
                   </select>
                 </div>
