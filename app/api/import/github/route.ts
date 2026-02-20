@@ -162,7 +162,7 @@ async function fetchGitHubFiles(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { repoUrl, branch = "main" } = body;
+    const { repoUrl } = body;
 
     if (!repoUrl || typeof repoUrl !== "string") {
       return NextResponse.json(
@@ -227,6 +227,52 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         );
       }
+
+      // Extract default branch from repository info
+      const defaultBranch = repoInfo.default_branch || "main";
+      console.log("Default Branch:", defaultBranch);
+
+      // Fetch files from repository
+      const ignoredDirs = [".git", "node_modules", "dist", "build", ".next", ".vscode", ".idea"];
+      const maxFileSize = 5 * 1024 * 1024; // 5MB per file
+      const maxFiles = 500; // Maximum number of files
+
+      const files = await fetchGitHubFiles(
+        owner,
+        repoName,
+        defaultBranch,
+        "",
+        ignoredDirs,
+        maxFiles,
+        maxFileSize
+      );
+
+      console.log("Extracted file paths:", files.map(f => f.name));
+      console.log("Total files found:", files.length);
+
+      if (files.length === 0) {
+        console.log("Filtered valid files: [] (no files found)");
+        return NextResponse.json(
+          { error: "No valid files found in repository. Make sure the repository contains code files." },
+          { status: 400 }
+        );
+      }
+
+      console.log("Filtered valid files:", files.map(f => ({ name: f.name, size: f.content.length })));
+
+      // Detect project language from file extensions
+      const detectedLanguage = detectProjectLanguage(files);
+
+      // Return project data (client will create the project)
+      return NextResponse.json({
+        success: true,
+        project: {
+          name: repoName,
+          description: `Imported from GitHub: ${owner}/${repoName}`,
+          language: detectedLanguage,
+          files,
+        },
+      });
     } catch (error) {
       console.error("Error fetching repository info:", error);
       return NextResponse.json(
@@ -234,48 +280,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    // Fetch files from repository
-    const ignoredDirs = [".git", "node_modules", "dist", "build", ".next", ".vscode", ".idea"];
-    const maxFileSize = 5 * 1024 * 1024; // 5MB per file
-    const maxFiles = 500; // Maximum number of files
-
-    const files = await fetchGitHubFiles(
-      owner,
-      repoName,
-      branch,
-      "",
-      ignoredDirs,
-      maxFiles,
-      maxFileSize
-    );
-
-    console.log("Extracted file paths:", files.map(f => f.name));
-    console.log("Total files found:", files.length);
-
-    if (files.length === 0) {
-      console.log("Filtered valid files: [] (no files found)");
-      return NextResponse.json(
-        { error: "No valid files found in repository. Make sure the repository contains code files." },
-        { status: 400 }
-      );
-    }
-
-    console.log("Filtered valid files:", files.map(f => ({ name: f.name, size: f.content.length })));
-
-    // Detect project language from file extensions
-    const detectedLanguage = detectProjectLanguage(files);
-
-    // Return project data (client will create the project)
-    return NextResponse.json({
-      success: true,
-      project: {
-        name: repoName,
-        description: `Imported from GitHub: ${owner}/${repoName}`,
-        language: detectedLanguage,
-        files,
-      },
-    });
   } catch (error) {
     console.error("GitHub import error:", error);
     return NextResponse.json(
