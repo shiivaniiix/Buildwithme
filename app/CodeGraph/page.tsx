@@ -15,6 +15,7 @@ export default function CodeGraphPage() {
   const [localFiles, setLocalFiles] = useState<FileList | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string>("");
   const [graph, setGraph] = useState<CodeGraph | null>(null);
+  const [fileSummaries, setFileSummaries] = useState<Record<string, string>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   
@@ -44,6 +45,7 @@ export default function CodeGraphPage() {
     setLocalFiles(null);
     setCurrentProjectId("");
     setGraph(null);
+    setFileSummaries({});
     setSummary(null);
     setArchitectureExplanation(null);
     setTechnologies([]);
@@ -58,6 +60,7 @@ export default function CodeGraphPage() {
     // Clear previous analysis when selecting new project
     setCurrentProjectId("");
     setGraph(null);
+    setFileSummaries({});
     setSummary(null);
     setArchitectureExplanation(null);
     setTechnologies([]);
@@ -154,6 +157,7 @@ export default function CodeGraphPage() {
         const analyzeData = await analyzeResponse.json();
         setGraph(analyzeData.graph);
         setCurrentProjectId(projectIdForAnalysis);
+        setFileSummaries(fileSummaries);
 
         // Automatically fetch explanation with file summaries
         await handleExplain(analyzeData.graph, fileSummaries);
@@ -188,6 +192,7 @@ export default function CodeGraphPage() {
     setIsAnalyzing(true);
     setAnalysisError(null);
     setGraph(null);
+    setFileSummaries({});
     setSummary(null);
     setArchitectureExplanation(null);
     setTechnologies([]);
@@ -208,9 +213,10 @@ export default function CodeGraphPage() {
       const data = await response.json();
       setGraph(data.graph);
       setCurrentProjectId(projectIdForAnalysis);
+      setFileSummaries(data.fileSummaries || {});
 
       // Automatically fetch explanation
-      await handleExplain(data.graph);
+      await handleExplain(data.graph, data.fileSummaries);
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Unknown error");
     } finally {
@@ -274,6 +280,7 @@ export default function CodeGraphPage() {
           projectId: currentProjectId,
           graph,
           question: question.trim(),
+          fileSummaries: fileSummaries,
         }),
       });
 

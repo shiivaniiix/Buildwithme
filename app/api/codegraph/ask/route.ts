@@ -9,7 +9,7 @@ import type { CodeGraph } from "@/lib/codegraph/graphTypes";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, graph, question } = body;
+    const { projectId, graph, question, fileSummaries } = body;
 
     // Validate required fields
     if (!projectId || typeof projectId !== "string") {
@@ -59,32 +59,45 @@ export async function POST(request: NextRequest) {
     }
 
     // Build system prompt
-    const systemPrompt = `You are an architecture analyst. You must ONLY analyze the provided graph JSON. Do not assume unseen files or structure.
+    const systemPrompt = `You are an architecture analyst. You have access to the project structure and key file content summaries.
 
 CRITICAL RULES:
-- Answer questions using ONLY the graph data provided
+- Answer questions using the graph data and file content summaries provided
 - Do NOT fabricate or assume missing code, files, or structure
-- Do NOT reference code content (you don't have access to file contents)
-- If information is not in the graph, explicitly state that it's not available
-- Focus on structure, organization, file paths, and technology stack visible in the graph
-- Be precise and honest about what you can and cannot determine from the graph
+- Use file content summaries to understand actual functionality when available
+- If information is not in the graph or file summaries, explicitly state that it's not available
+- Focus on structure, organization, file paths, technology stack, and actual code functionality
+- Be precise and honest about what you can and cannot determine from the available information
 
 When answering:
 - Reference specific nodes (files/folders) from the graph
 - Mention detected technologies
 - Explain relationships visible in the edges
-- If asked about code content, explain that only structure is available`;
+- Use file content summaries to explain actual functionality and code behavior
+- Combine structure analysis with code content understanding`;
 
-    // Build user prompt with graph data and question
-    const userPrompt = `Question: ${question.trim()}
+    // Build user prompt with graph data, file summaries, and question
+    let userPrompt = `Question: ${question.trim()}
 
 Project ID: ${projectId}
 Generated at: ${new Date(graph.generatedAt).toISOString()}
 
-Code Graph:
-${JSON.stringify(graph, null, 2)}
+Code Graph Structure:
+${JSON.stringify(graph, null, 2)}`;
 
-Answer the question using ONLY the information available in the graph above. Do not assume or invent any information not present in the graph.`;
+    // Add file summaries if available
+    if (fileSummaries && typeof fileSummaries === "object" && Object.keys(fileSummaries).length > 0) {
+      userPrompt += `\n\nKey File Content Summaries:\n`;
+      for (const [filePath, content] of Object.entries(fileSummaries)) {
+        // Limit content length to keep token usage reasonable (max 2000 chars per file)
+        const limitedContent = typeof content === "string" && content.length > 2000 
+          ? content.substring(0, 2000) + "\n... (truncated)"
+          : content;
+        userPrompt += `\n--- ${filePath} ---\n${limitedContent}\n`;
+      }
+    }
+
+    userPrompt += `\n\nAnswer the question using the graph structure and file content summaries above. Reference specific files and code when explaining functionality.`;
 
     // Call OpenAI API
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
