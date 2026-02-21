@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
 import { getSortedProjects, type Project } from "@/lib/projects";
 import { getProjectFiles } from "@/lib/projectFiles";
-import { getAnalyses, getAnalysisByProjectId, saveAnalysis } from "@/lib/codegraph/analysisStore";
+import { getAnalyses, getAnalysisByProjectId, getAnalysisById, saveAnalysis } from "@/lib/codegraph/analysisStore";
 import type { ProjectAnalysis } from "@/lib/codegraph/analysisStore";
 import { getSessionsByAnalysisId, createChatSession, getMessagesBySessionId, addMessage } from "@/lib/codegraph/chatStore";
 import type { ChatSession } from "@/lib/codegraph/chatStore";
@@ -37,11 +37,15 @@ export default function CodeGraphPage() {
 
   // Sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [currentAnalysis, setCurrentAnalysis] = useState<ProjectAnalysis | null>(null);
-  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [analyses, setAnalyses] = useState<ProjectAnalysis[]>([]);
   const [forceReanalyze, setForceReanalyze] = useState(false);
+
+  // Centralized active project state - single source of truth
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
+  const [activeAnalysis, setActiveAnalysis] = useState<ProjectAnalysis | null>(null);
+  const [activeSessions, setActiveSessions] = useState<ChatSession[]>([]);
+  const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
 
   // Load projects and analyses on mount
   useEffect(() => {
@@ -52,15 +56,65 @@ export default function CodeGraphPage() {
     const loadedAnalyses = getAnalyses();
     console.log("Loaded analyses:", loadedAnalyses);
     setAnalyses(loadedAnalyses);
-    
-    // Load sessions for all analyses
-    const allSessions: ChatSession[] = [];
-    loadedAnalyses.forEach(analysis => {
-      const analysisSessions = getSessionsByAnalysisId(analysis.id);
-      allSessions.push(...analysisSessions);
-    });
-    setSessions(allSessions);
   }, []);
+
+  // Centralized effect: Load full project context when activeAnalysisId changes
+  useEffect(() => {
+    if (!activeAnalysisId) {
+      // Clear all project-dependent state
+      setActiveAnalysis(null);
+      setGraph(null);
+      setFileSummaries({});
+      setSummary(null);
+      setArchitectureExplanation(null);
+      setTechnologies([]);
+      setActiveSessions([]);
+      setActiveSession(null);
+      setMessages([]);
+      setCurrentProjectId("");
+      return;
+    }
+
+    setIsLoadingProject(true);
+    
+    // Fetch full analysis by ID
+    const analysis = getAnalysisById(activeAnalysisId);
+    if (!analysis) {
+      setIsLoadingProject(false);
+      return;
+    }
+
+    // Set all project context from single source
+    setActiveAnalysis(analysis);
+    setGraph(analysis.fileGraph);
+    setFileSummaries(analysis.fileSummaries);
+    setSummary(analysis.summaryText);
+    setArchitectureExplanation(analysis.architectureExplanation);
+    setTechnologies(analysis.technologies);
+    setCurrentProjectId(analysis.projectId);
+
+    // Load sessions for this analysis
+    const analysisSessions = getSessionsByAnalysisId(analysis.id);
+    setActiveSessions(analysisSessions);
+
+    // Automatically load latest session if available
+    if (analysisSessions.length > 0) {
+      const latestSession = analysisSessions.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      setActiveSession(latestSession);
+      const sessionMessages = getMessagesBySessionId(latestSession.id, 20);
+      setMessages(sessionMessages.map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: new Date(m.createdAt),
+      })));
+    } else {
+      setActiveSession(null);
+      setMessages([]);
+    }
+
+    setIsLoadingProject(false);
+  }, [activeAnalysisId]);
 
   const handleSourceChange = (source: SourceType) => {
     setSourceType(source);
@@ -81,42 +135,20 @@ export default function CodeGraphPage() {
     setAskError(null);
   };
 
-  const handleProjectSelect = async (projectId: string) => {
+  // Handle project selection from dropdown (for new analysis)
+  const handleProjectSelect = (projectId: string) => {
     setSelectedProjectId(projectId);
-    // Clear previous analysis when selecting new project
-    setCurrentProjectId("");
-    setGraph(null);
-    setFileSummaries({});
-    setSummary(null);
-    setArchitectureExplanation(null);
-    setTechnologies([]);
-    setMessages([]);
-    setQuestion("");
+    setActiveAnalysisId(null); // Clear active analysis when selecting new project
+    setForceReanalyze(false);
+  };
+
+  // Handle clicking on project in sidebar - loads full context
+  const handleLoadProject = (analysisId: string) => {
+    setActiveAnalysisId(analysisId);
+    setQuestion(""); // Clear question input
     setAnalysisError(null);
     setExplainError(null);
     setAskError(null);
-    setCurrentAnalysis(null);
-    setCurrentSession(null);
-    setSessions([]);
-    setForceReanalyze(false);
-
-    // Check for existing analysis
-    if (!forceReanalyze) {
-      const existingAnalysis = getAnalysisByProjectId(projectId);
-      if (existingAnalysis) {
-        setCurrentAnalysis(existingAnalysis);
-        setGraph(existingAnalysis.fileGraph);
-        setFileSummaries(existingAnalysis.fileSummaries);
-        setSummary(existingAnalysis.summaryText);
-        setArchitectureExplanation(existingAnalysis.architectureExplanation);
-        setTechnologies(existingAnalysis.technologies);
-        setCurrentProjectId(projectId);
-        
-        // Load sessions for this analysis
-        const analysisSessions = getSessionsByAnalysisId(existingAnalysis.id);
-        setSessions(analysisSessions);
-      }
-    }
   };
 
   const handleLocalFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -254,18 +286,8 @@ export default function CodeGraphPage() {
       if (sourceType === "internal" && !forceReanalyze) {
         const existingAnalysis = getAnalysisByProjectId(projectIdForAnalysis);
         if (existingAnalysis) {
-          setCurrentAnalysis(existingAnalysis);
-          setGraph(existingAnalysis.fileGraph);
-          setFileSummaries(existingAnalysis.fileSummaries);
-          setSummary(existingAnalysis.summaryText);
-          setArchitectureExplanation(existingAnalysis.architectureExplanation);
-          setTechnologies(existingAnalysis.technologies);
-          setCurrentProjectId(projectIdForAnalysis);
-          
-          // Load sessions
-          const analysisSessions = getSessionsByAnalysisId(existingAnalysis.id);
-          setSessions(analysisSessions);
-          
+          // Use centralized state management
+          setActiveAnalysisId(existingAnalysis.id);
           setIsAnalyzing(false);
           return;
         }
@@ -304,18 +326,13 @@ export default function CodeGraphPage() {
           summaryText: summary,
           architectureExplanation,
         });
-        setCurrentAnalysis(savedAnalysis);
         
         // Refresh analyses list
         const refreshedAnalyses = getAnalyses();
         setAnalyses(refreshedAnalyses);
         
-        // Load sessions
-        const analysisSessions = getSessionsByAnalysisId(savedAnalysis.id);
-        setSessions(prev => {
-          const existing = prev.filter(s => s.projectAnalysisId !== savedAnalysis.id);
-          return [...existing, ...analysisSessions];
-        });
+        // Set as active analysis to load full context
+        setActiveAnalysisId(savedAnalysis.id);
       }
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Unknown error");
@@ -366,18 +383,13 @@ export default function CodeGraphPage() {
           summaryText: data.summary,
           architectureExplanation: data.architectureExplanation,
         });
-        setCurrentAnalysis(savedAnalysis);
         
         // Refresh analyses list
         const refreshedAnalyses = getAnalyses();
         setAnalyses(refreshedAnalyses);
         
-        // Load sessions
-        const analysisSessions = getSessionsByAnalysisId(savedAnalysis.id);
-        setSessions(prev => {
-          const existing = prev.filter(s => s.projectAnalysisId !== savedAnalysis.id);
-          return [...existing, ...analysisSessions];
-        });
+        // Set as active analysis to load full context
+        setActiveAnalysisId(savedAnalysis.id);
       }
     } catch (error) {
       setExplainError(error instanceof Error ? error.message : "Unknown error");
@@ -397,17 +409,17 @@ export default function CodeGraphPage() {
       return;
     }
 
-    if (!graph || !currentProjectId || !currentAnalysis) {
+    if (!graph || !currentProjectId || !activeAnalysis) {
       setAskError("Please analyze a project first");
       return;
     }
 
     // Ensure we have a session
-    let session = currentSession;
+    let session = activeSession;
     if (!session) {
-      session = createChatSession(currentAnalysis.id);
-      setCurrentSession(session);
-      setSessions(prev => [...prev, session!]);
+      session = createChatSession(activeAnalysis.id);
+      setActiveSession(session);
+      setActiveSessions(prev => [...prev, session!]);
     }
 
     const userMessage = {
@@ -469,18 +481,18 @@ export default function CodeGraphPage() {
   };
 
   const handleNewChat = () => {
-    if (!currentAnalysis) return;
-    const newSession = createChatSession(currentAnalysis.id);
-    setCurrentSession(newSession);
-    setSessions(prev => [...prev, newSession]);
+    if (!activeAnalysis) return;
+    const newSession = createChatSession(activeAnalysis.id);
+    setActiveSession(newSession);
+    setActiveSessions(prev => [...prev, newSession]);
     setMessages([]);
     setQuestion("");
   };
 
   const handleSelectSession = (sessionId: string) => {
-    const session = sessions.find(s => s.id === sessionId);
+    const session = activeSessions.find(s => s.id === sessionId);
     if (session) {
-      setCurrentSession(session);
+      setActiveSession(session);
       const sessionMessages = getMessagesBySessionId(sessionId, 20);
       setMessages(sessionMessages.map(m => ({
         id: m.id,
@@ -492,10 +504,11 @@ export default function CodeGraphPage() {
   };
 
   const handleReanalyze = () => {
+    if (!activeAnalysis) return;
     setForceReanalyze(true);
-    if (selectedProjectId) {
-      handleAnalyze();
-    }
+    setSelectedProjectId(activeAnalysis.projectId);
+    setActiveAnalysisId(null); // Clear active to allow re-analysis
+    handleAnalyze();
   };
 
   // Helper function to extract display name from different sources
@@ -610,49 +623,27 @@ export default function CodeGraphPage() {
                 <div className="space-y-2">
                   {analyses.map(analysis => {
                     const project = projects.find(p => p.id === analysis.projectId);
-                    const projectSessions = sessions.filter(s => s.projectAnalysisId === analysis.id);
+                    const projectSessions = getSessionsByAnalysisId(analysis.id);
                     // Use displayName with fallback
                     const displayName = analysis.displayName || project?.name || analysis.projectId;
+                    const isActive = activeAnalysisId === analysis.id;
+                    
                     return (
-                      <div key={analysis.id} className="glass rounded-lg p-3 border border-gray-700">
-                        <div className="font-semibold text-white text-sm mb-2">{displayName}</div>
-                        <button
-                          onClick={() => {
-                            if (project) handleProjectSelect(project.id);
-                          }}
-                          className="text-xs text-cyan-400 hover:text-cyan-300 mb-2 block"
-                        >
-                          Load Analysis
-                        </button>
-                        <button
-                          onClick={handleReanalyze}
-                          className="text-xs text-yellow-400 hover:text-yellow-300 mb-2 block"
-                        >
-                          Re-analyze
-                        </button>
+                      <div 
+                        key={analysis.id} 
+                        className={`glass rounded-lg p-3 border cursor-pointer transition-colors ${
+                          isActive 
+                            ? "border-cyan-500 bg-cyan-500/10" 
+                            : "border-gray-700 hover:border-gray-600"
+                        }`}
+                        onClick={() => handleLoadProject(analysis.id)}
+                      >
+                        <div className="font-semibold text-white text-sm mb-1">{displayName}</div>
                         {projectSessions.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            {projectSessions.map(session => (
-                              <button
-                                key={session.id}
-                                onClick={() => handleSelectSession(session.id)}
-                                className={`text-xs block w-full text-left px-2 py-1 rounded ${
-                                  currentSession?.id === session.id
-                                    ? "bg-cyan-500/20 text-cyan-300"
-                                    : "text-gray-400 hover:text-gray-300"
-                                }`}
-                              >
-                                {session.title}
-                              </button>
-                            ))}
+                          <div className="text-xs text-gray-400 mt-1">
+                            {projectSessions.length} chat{projectSessions.length !== 1 ? 's' : ''}
                           </div>
                         )}
-                        <button
-                          onClick={handleNewChat}
-                          className="text-xs text-green-400 hover:text-green-300 mt-2 block"
-                        >
-                          + New Chat
-                        </button>
                       </div>
                     );
                   })}
@@ -839,7 +830,40 @@ export default function CodeGraphPage() {
               {/* Chat Section */}
               <section className="lg:col-span-2">
                 <div className="glass-strong rounded-2xl p-8 shadow-soft-xl">
-                  <h2 className="text-2xl font-bold mb-6 text-white">Chat About This Project</h2>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-white">Chat About This Project</h2>
+                    {activeSessions.length > 1 && (
+                      <div className="flex gap-2">
+                        {activeSessions.map(session => (
+                          <button
+                            key={session.id}
+                            onClick={() => handleSelectSession(session.id)}
+                            className={`text-xs px-3 py-1 rounded transition-colors ${
+                              activeSession?.id === session.id
+                                ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                                : "bg-gray-700/50 text-gray-400 hover:text-gray-300 border border-gray-600"
+                            }`}
+                          >
+                            {session.title}
+                          </button>
+                        ))}
+                        <button
+                          onClick={handleNewChat}
+                          className="text-xs px-3 py-1 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded border border-green-500/30 transition-colors"
+                        >
+                          + New
+                        </button>
+                      </div>
+                    )}
+                    {activeSessions.length === 1 && (
+                      <button
+                        onClick={handleNewChat}
+                        className="text-xs px-3 py-1 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded border border-green-500/30 transition-colors"
+                      >
+                        + New Chat
+                      </button>
+                    )}
+                  </div>
                   
                   <div className="space-y-4">
                     {/* Chat Messages */}
