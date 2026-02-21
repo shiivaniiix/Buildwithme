@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id
+  clerkId   String   @unique
+  email     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  projects         Project[]
+  projectAnalyses  ProjectAnalysis[]
+  chatSessions     ChatSession[]
+
+  @@map("users")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  sourceType  String
+  githubOwner String?
+  githubRepo  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectAnalyses ProjectAnalysis[]
+
+  @@map("projects")
+}
+
+model ProjectAnalysis {
+  id            String   @id @default(uuid())
+  projectId     String
+  userId        String
+  summaryText   String
+  fileGraph     Json
+  fileSummaries Json
+  technologies  Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatSessions ChatSession[]
+
+  @@map("project_analyses")
+}
+
+model ChatSession {
+  id                String   @id @default(uuid())
+  projectAnalysisId String
+  userId            String
+  title             String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  projectAnalysis ProjectAnalysis @relation(fields: [projectAnalysisId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages        ChatMessage[]
+
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  sessionId String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
