@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
 import { getSortedProjects, type Project } from "@/lib/projects";
 import { getProjectFiles } from "@/lib/projectFiles";
@@ -26,9 +26,10 @@ export default function CodeGraphPage() {
   const [explainError, setExplainError] = useState<string | null>(null);
   
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Array<{ id: string; role: "user" | "assistant"; content: string; createdAt: Date }>>([]);
   const [isAsking, setIsAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load projects on mount
   useEffect(() => {
@@ -49,7 +50,8 @@ export default function CodeGraphPage() {
     setSummary(null);
     setArchitectureExplanation(null);
     setTechnologies([]);
-    setAnswer(null);
+    setMessages([]);
+    setQuestion("");
     setAnalysisError(null);
     setExplainError(null);
     setAskError(null);
@@ -64,7 +66,8 @@ export default function CodeGraphPage() {
     setSummary(null);
     setArchitectureExplanation(null);
     setTechnologies([]);
-    setAnswer(null);
+    setMessages([]);
+    setQuestion("");
     setAnalysisError(null);
     setExplainError(null);
     setAskError(null);
@@ -78,7 +81,7 @@ export default function CodeGraphPage() {
     setSummary(null);
     setArchitectureExplanation(null);
     setTechnologies([]);
-    setAnswer(null);
+    setMessages([]);
     setAnalysisError(null);
   };
 
@@ -117,7 +120,7 @@ export default function CodeGraphPage() {
       setSummary(null);
       setArchitectureExplanation(null);
       setTechnologies([]);
-      setAnswer(null);
+      setMessages([]);
 
       try {
         // Import from GitHub
@@ -196,7 +199,8 @@ export default function CodeGraphPage() {
     setSummary(null);
     setArchitectureExplanation(null);
     setTechnologies([]);
-    setAnswer(null);
+    setMessages([]);
+    setQuestion("");
 
     try {
       const response = await fetch("/api/codegraph/analyze", {
@@ -258,6 +262,11 @@ export default function CodeGraphPage() {
     }
   };
 
+  // Auto-scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   const handleAsk = async () => {
     if (!question.trim()) {
       setAskError("Question is required");
@@ -269,18 +278,30 @@ export default function CodeGraphPage() {
       return;
     }
 
+    const userMessage = {
+      id: `msg-${Date.now()}-user`,
+      role: "user" as const,
+      content: question.trim(),
+      createdAt: new Date(),
+    };
+
+    // Add user message immediately
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+    setQuestion("");
     setIsAsking(true);
     setAskError(null);
 
     try {
-      const response = await fetch("/api/codegraph/ask", {
+      const response = await fetch("/api/codegraph/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: currentProjectId,
           graph,
-          question: question.trim(),
           fileSummaries: fileSummaries,
+          messages: messages, // Pass previous messages (without the new user message, as it will be added in the prompt)
+          newQuestion: userMessage.content,
         }),
       });
 
@@ -290,9 +311,18 @@ export default function CodeGraphPage() {
       }
 
       const data = await response.json();
-      setAnswer(data.answer);
+      const assistantMessage = {
+        id: `msg-${Date.now()}-assistant`,
+        role: "assistant" as const,
+        content: data.reply,
+        createdAt: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       setAskError(error instanceof Error ? error.message : "Unknown error");
+      // Remove user message on error
+      setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
     } finally {
       setIsAsking(false);
     }
@@ -527,32 +557,66 @@ export default function CodeGraphPage() {
                 </div>
               </section>
 
-              {/* Q&A Section */}
+              {/* Chat Section */}
               <section className="lg:col-span-2">
                 <div className="glass-strong rounded-2xl p-8 shadow-soft-xl">
-                  <h2 className="text-2xl font-bold mb-6 text-white">Ask About This Project</h2>
+                  <h2 className="text-2xl font-bold mb-6 text-white">Chat About This Project</h2>
                   
                   <div className="space-y-4">
-                    <div>
-                      <input type="text" value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAsk()} className="w-full px-4 py-2 glass rounded-lg border border-gray-600 text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none" placeholder="Ask a question about the project structure..." />
+                    {/* Chat Messages */}
+                    <div className="glass rounded-lg border border-gray-700 h-96 overflow-y-auto ide-scrollbar p-4 space-y-4">
+                      {messages.length === 0 ? (
+                        <div className="text-gray-500 text-sm text-center py-8">
+                          Start a conversation about this project...
+                        </div>
+                      ) : (
+                        messages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                          >
+                            <div
+                              className={`max-w-[80%] rounded-lg p-3 ${
+                                msg.role === "user"
+                                  ? "bg-cyan-500/20 border border-cyan-500/30 text-white"
+                                  : "bg-gray-700/50 border border-gray-600 text-gray-200"
+                              }`}
+                            >
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {isAsking && (
+                        <div className="flex justify-start">
+                          <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                            <p className="text-sm text-gray-400">Thinking...</p>
+                          </div>
+                        </div>
+                      )}
+                      <div ref={messagesEndRef} />
                     </div>
 
                     {askError && <div className="px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">{askError}</div>}
 
-                    <button
-                      onClick={handleAsk}
-                      disabled={isAsking || !question.trim()}
-                      className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isAsking ? "Asking..." : "Ask AI"}
-                    </button>
-
-                    {answer && (
-                      <div className="glass rounded-lg p-4 border border-gray-700">
-                        <h3 className="text-lg font-semibold text-cyan-400 mb-2">Answer</h3>
-                        <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">{answer}</p>
-                      </div>
-                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={question}
+                        onChange={(e) => setQuestion(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAsk()}
+                        className="flex-1 px-4 py-2 glass rounded-lg border border-gray-600 text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none"
+                        placeholder="Ask a question about the project..."
+                        disabled={isAsking}
+                      />
+                      <button
+                        onClick={handleAsk}
+                        disabled={isAsking || !question.trim()}
+                        className="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isAsking ? "..." : "Send"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>
