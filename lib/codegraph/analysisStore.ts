@@ -55,6 +55,12 @@ export function getAnalysisById(analysisId: string): ProjectAnalysis | undefined
  * Save or update analysis
  */
 export function saveAnalysis(analysis: Omit<ProjectAnalysis, "id" | "userId" | "createdAt" | "updatedAt">): ProjectAnalysis {
+  // Ensure displayName and sourceType are provided (backward compatibility)
+  const analysisWithDefaults = {
+    ...analysis,
+    displayName: analysis.displayName || analysis.projectId,
+    sourceType: analysis.sourceType || "internal",
+  };
   if (typeof window === "undefined") {
     throw new Error("Cannot save analysis on server side");
   }
@@ -75,7 +81,7 @@ export function saveAnalysis(analysis: Omit<ProjectAnalysis, "id" | "userId" | "
     // Update existing
     savedAnalysis = {
       ...allAnalyses[existingIndex],
-      ...analysis,
+      ...analysisWithDefaults,
       userId,
       updatedAt: now,
     };
@@ -84,7 +90,7 @@ export function saveAnalysis(analysis: Omit<ProjectAnalysis, "id" | "userId" | "
     // Create new
     savedAnalysis = {
       id: `analysis-${now}`,
-      ...analysis,
+      ...analysisWithDefaults,
       userId,
       createdAt: now,
       updatedAt: now,

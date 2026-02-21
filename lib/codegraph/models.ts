@@ -14,6 +14,8 @@ export interface ProjectAnalysis {
   id: string;
   projectId: string;
   userId: string;
+  displayName: string; // User-friendly project name
+  sourceType: "github" | "local" | "internal"; // Source of the project
   fileGraph: CodeGraph; // Full graph structure
   fileSummaries: Record<string, string>; // File path -> content summary
   technologies: Array<{ name: string; description: string; deepLink: string }>;

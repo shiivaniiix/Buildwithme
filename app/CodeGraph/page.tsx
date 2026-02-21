@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
 import { getSortedProjects, type Project } from "@/lib/projects";
 import { getProjectFiles } from "@/lib/projectFiles";
-import { getAnalysisByProjectId, saveAnalysis } from "@/lib/codegraph/analysisStore";
+import { getAnalyses, getAnalysisByProjectId, saveAnalysis } from "@/lib/codegraph/analysisStore";
 import type { ProjectAnalysis } from "@/lib/codegraph/analysisStore";
 import { getSessionsByAnalysisId, createChatSession, getMessagesBySessionId, addMessage } from "@/lib/codegraph/chatStore";
 import type { ChatSession } from "@/lib/codegraph/chatStore";
@@ -47,15 +47,19 @@ export default function CodeGraphPage() {
   useEffect(() => {
     const loadedProjects = getSortedProjects();
     setProjects(loadedProjects);
-    const loadedAnalyses = getAnalysisByProjectId ? (() => {
-      const allAnalyses: ProjectAnalysis[] = [];
-      loadedProjects.forEach(project => {
-        const analysis = getAnalysisByProjectId(project.id);
-        if (analysis) allAnalyses.push(analysis);
-      });
-      return allAnalyses;
-    })() : [];
+    
+    // Load all analyses for current user
+    const loadedAnalyses = getAnalyses();
+    console.log("Loaded analyses:", loadedAnalyses);
     setAnalyses(loadedAnalyses);
+    
+    // Load sessions for all analyses
+    const allSessions: ChatSession[] = [];
+    loadedAnalyses.forEach(analysis => {
+      const analysisSessions = getSessionsByAnalysisId(analysis.id);
+      allSessions.push(...analysisSessions);
+    });
+    setSessions(allSessions);
   }, []);
 
   const handleSourceChange = (source: SourceType) => {
@@ -289,8 +293,11 @@ export default function CodeGraphPage() {
       
       // Save analysis after explanation is complete
       if (summary && architectureExplanation && technologies.length > 0) {
+        const displayName = getDisplayName(projectIdForAnalysis, sourceType, githubUrl, projects.find(p => p.id === projectIdForAnalysis));
         const savedAnalysis = saveAnalysis({
           projectId: projectIdForAnalysis,
+          displayName,
+          sourceType,
           fileGraph: data.graph,
           fileSummaries: data.fileSummaries || {},
           technologies,
@@ -299,9 +306,16 @@ export default function CodeGraphPage() {
         });
         setCurrentAnalysis(savedAnalysis);
         
+        // Refresh analyses list
+        const refreshedAnalyses = getAnalyses();
+        setAnalyses(refreshedAnalyses);
+        
         // Load sessions
         const analysisSessions = getSessionsByAnalysisId(savedAnalysis.id);
-        setSessions(analysisSessions);
+        setSessions(prev => {
+          const existing = prev.filter(s => s.projectAnalysisId !== savedAnalysis.id);
+          return [...existing, ...analysisSessions];
+        });
       }
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Unknown error");
@@ -340,8 +354,12 @@ export default function CodeGraphPage() {
       
       // Save analysis if we have all data
       if (currentProjectId && graph && data.summary && data.architectureExplanation) {
+        const project = projects.find(p => p.id === currentProjectId);
+        const displayName = getDisplayName(currentProjectId, sourceType, githubUrl, project);
         const savedAnalysis = saveAnalysis({
           projectId: currentProjectId,
+          displayName,
+          sourceType,
           fileGraph: graph,
           fileSummaries: fileSummaries || {},
           technologies: data.technologies || [],
@@ -350,9 +368,16 @@ export default function CodeGraphPage() {
         });
         setCurrentAnalysis(savedAnalysis);
         
+        // Refresh analyses list
+        const refreshedAnalyses = getAnalyses();
+        setAnalyses(refreshedAnalyses);
+        
         // Load sessions
         const analysisSessions = getSessionsByAnalysisId(savedAnalysis.id);
-        setSessions(analysisSessions);
+        setSessions(prev => {
+          const existing = prev.filter(s => s.projectAnalysisId !== savedAnalysis.id);
+          return [...existing, ...analysisSessions];
+        });
       }
     } catch (error) {
       setExplainError(error instanceof Error ? error.message : "Unknown error");
@@ -473,6 +498,26 @@ export default function CodeGraphPage() {
     }
   };
 
+  // Helper function to extract display name from different sources
+  const getDisplayName = (projectId: string, sourceType: SourceType, githubUrl?: string, project?: Project): string => {
+    if (sourceType === "internal" && project) {
+      return project.name;
+    } else if (sourceType === "github" && githubUrl) {
+      // Extract repo name from GitHub URL
+      // Example: https://github.com/shiivaniiix/tic-tac-toe -> tic-tac-toe
+      const match = githubUrl.match(/github\.com\/[^\/]+\/([^\/]+)/);
+      if (match && match[1]) {
+        return match[1].replace(/\.git$/, "");
+      }
+      return projectId;
+    } else if (sourceType === "local") {
+      // For local folders, use the projectId (which contains timestamp)
+      // In a real implementation, we'd extract folder name from FileList
+      return "Local Folder";
+    }
+    return projectId;
+  };
+
   // Build structure tree from graph
   const buildStructureTree = () => {
     if (!graph) return null;
@@ -529,82 +574,101 @@ export default function CodeGraphPage() {
   };
 
   return (
-    <main className="min-h-screen code-pattern relative">
-      <div className="relative z-10 flex">
+    <main className="min-h-screen code-pattern relative pt-16">
+      <div className="flex h-[calc(100vh-4rem)]">
         {/* Sidebar */}
-        <div className={`${sidebarOpen ? "w-80" : "w-0"} transition-all duration-300 overflow-hidden border-r border-gray-800 bg-gray-900/50`}>
-          <div className="h-screen overflow-y-auto p-4 space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">Projects</h2>
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="text-gray-400 hover:text-white"
-              >
-                {sidebarOpen ? "←" : "→"}
-              </button>
-            </div>
-            
-            {analyses.length === 0 ? (
-              <p className="text-gray-500 text-sm">No analyzed projects yet</p>
-            ) : (
-              <div className="space-y-2">
-                {analyses.map(analysis => {
-                  const project = projects.find(p => p.id === analysis.projectId);
-                  const projectSessions = sessions.filter(s => s.projectAnalysisId === analysis.id);
-                  return (
-                    <div key={analysis.id} className="glass rounded-lg p-3 border border-gray-700">
-                      <div className="font-semibold text-white text-sm mb-2">{project?.name || analysis.projectId}</div>
-                      <button
-                        onClick={() => {
-                          if (project) handleProjectSelect(project.id);
-                        }}
-                        className="text-xs text-cyan-400 hover:text-cyan-300 mb-2 block"
-                      >
-                        Load Analysis
-                      </button>
-                      <button
-                        onClick={handleReanalyze}
-                        className="text-xs text-yellow-400 hover:text-yellow-300 mb-2 block"
-                      >
-                        Re-analyze
-                      </button>
-                      {projectSessions.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {projectSessions.map(session => (
-                            <button
-                              key={session.id}
-                              onClick={() => handleSelectSession(session.id)}
-                              className={`text-xs block w-full text-left px-2 py-1 rounded ${
-                                currentSession?.id === session.id
-                                  ? "bg-cyan-500/20 text-cyan-300"
-                                  : "text-gray-400 hover:text-gray-300"
-                              }`}
-                            >
-                              {session.title}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <button
-                        onClick={handleNewChat}
-                        className="text-xs text-green-400 hover:text-green-300 mt-2 block"
-                      >
-                        + New Chat
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+        <div className={`${sidebarOpen ? "w-72" : "w-14"} transition-all duration-300 border-r border-gray-800 bg-gray-900/50 relative flex flex-col`}>
+          {/* Toggle Button - Always Visible */}
+          <div className="flex-shrink-0 p-2 border-b border-gray-800">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="w-full p-2 text-gray-400 hover:text-white hover:bg-gray-800/50 rounded transition-colors flex items-center justify-center"
+              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              {sidebarOpen ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
+            </button>
           </div>
+
+          {/* Sidebar Content */}
+          {sidebarOpen && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="mb-4">
+                <h2 className="text-xl font-bold text-white">Projects</h2>
+              </div>
+              
+              {analyses.length === 0 ? (
+                <p className="text-gray-500 text-sm">No analyzed projects yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {analyses.map(analysis => {
+                    const project = projects.find(p => p.id === analysis.projectId);
+                    const projectSessions = sessions.filter(s => s.projectAnalysisId === analysis.id);
+                    // Use displayName with fallback
+                    const displayName = analysis.displayName || project?.name || analysis.projectId;
+                    return (
+                      <div key={analysis.id} className="glass rounded-lg p-3 border border-gray-700">
+                        <div className="font-semibold text-white text-sm mb-2">{displayName}</div>
+                        <button
+                          onClick={() => {
+                            if (project) handleProjectSelect(project.id);
+                          }}
+                          className="text-xs text-cyan-400 hover:text-cyan-300 mb-2 block"
+                        >
+                          Load Analysis
+                        </button>
+                        <button
+                          onClick={handleReanalyze}
+                          className="text-xs text-yellow-400 hover:text-yellow-300 mb-2 block"
+                        >
+                          Re-analyze
+                        </button>
+                        {projectSessions.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {projectSessions.map(session => (
+                              <button
+                                key={session.id}
+                                onClick={() => handleSelectSession(session.id)}
+                                className={`text-xs block w-full text-left px-2 py-1 rounded ${
+                                  currentSession?.id === session.id
+                                    ? "bg-cyan-500/20 text-cyan-300"
+                                    : "text-gray-400 hover:text-gray-300"
+                                }`}
+                              >
+                                {session.title}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          onClick={handleNewChat}
+                          className="text-xs text-green-400 hover:text-green-300 mt-2 block"
+                        >
+                          + New Chat
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 max-w-7xl mx-auto px-6 py-32">
-          <header className="mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">CodeGraph</h1>
-            <p className="text-gray-400 text-lg">Analyze project structure and get AI-powered insights</p>
-          </header>
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-7xl mx-auto px-6 py-8">
+            <header className="mb-8">
+              <h1 className="text-4xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">CodeGraph</h1>
+              <p className="text-gray-400 text-lg">Analyze project structure and get AI-powered insights</p>
+            </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Input Section */}
@@ -837,7 +901,8 @@ export default function CodeGraphPage() {
               </section>
             </>
           )}
-        </div>
+            </div>
+          </div>
         </div>
       </div>
     </main>
