@@ -47,6 +47,14 @@ export default function CodeGraphPage() {
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   const [isLoadingProject, setIsLoadingProject] = useState(false);
 
+  // Architecture time slider state
+  const [commits, setCommits] = useState<Array<{ sha: string; date: string; message: string; author: string }>>([]);
+  const [activeCommitSha, setActiveCommitSha] = useState<string | null>(null);
+  const [activeSnapshotGraph, setActiveSnapshotGraph] = useState<CodeGraph | null>(null);
+  const [comparisonExplanation, setComparisonExplanation] = useState<string | null>(null);
+  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
+  const [isComparing, setIsComparing] = useState(false);
+
   // Load projects and analyses on mount
   useEffect(() => {
     const loadedProjects = getSortedProjects();
@@ -115,6 +123,104 @@ export default function CodeGraphPage() {
 
     setIsLoadingProject(false);
   }, [activeAnalysisId]);
+
+  // Load commits for GitHub project
+  const loadCommits = async (owner: string, repo: string) => {
+    try {
+      const response = await fetch(`/api/github/commits?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+      if (!response.ok) {
+        throw new Error("Failed to load commits");
+      }
+      const data = await response.json();
+      setCommits(data.commits || []);
+      // Set latest commit as active
+      if (data.commits && data.commits.length > 0) {
+        setActiveCommitSha(data.commits[0].sha);
+      }
+    } catch (error) {
+      console.error("Error loading commits:", error);
+    }
+  };
+
+  // Load snapshot at specific commit
+  const loadSnapshot = async (owner: string, repo: string, commitSha: string) => {
+    setIsLoadingSnapshot(true);
+    setComparisonExplanation(null);
+    
+    try {
+      const response = await fetch(`/api/github/snapshot?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&commitSha=${encodeURIComponent(commitSha)}`);
+      if (!response.ok) {
+        throw new Error("Failed to load snapshot");
+      }
+      const data = await response.json();
+      setActiveSnapshotGraph(data.snapshotGraph);
+
+      // Compare with current if we have both
+      if (graph && data.snapshotGraph) {
+        await compareArchitectures(graph, data.snapshotGraph);
+      }
+    } catch (error) {
+      console.error("Error loading snapshot:", error);
+    } finally {
+      setIsLoadingSnapshot(false);
+    }
+  };
+
+  // Compare architectures and get AI explanation
+  const compareArchitectures = async (current: CodeGraph, historical: CodeGraph) => {
+    setIsComparing(true);
+    try {
+      const response = await fetch("/api/architecture/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentGraph: current, historicalGraph: historical }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to compare architectures");
+      }
+
+      const data = await response.json();
+      setComparisonExplanation(data.explanation);
+    } catch (error) {
+      console.error("Error comparing architectures:", error);
+    } finally {
+      setIsComparing(false);
+    }
+  };
+
+  // Handle slider change
+  const handleSliderChange = (commitSha: string) => {
+    setActiveCommitSha(commitSha);
+    // Snapshot loading is handled by useEffect
+  };
+
+  // Load commits when GitHub project is active
+  useEffect(() => {
+    if (!activeAnalysis || activeAnalysis.sourceType !== "github") {
+      setCommits([]);
+      setActiveCommitSha(null);
+      setActiveSnapshotGraph(null);
+      setComparisonExplanation(null);
+      return;
+    }
+
+    // Load commits if we have owner/repo
+    if (activeAnalysis.githubOwner && activeAnalysis.githubRepo) {
+      loadCommits(activeAnalysis.githubOwner, activeAnalysis.githubRepo);
+    }
+  }, [activeAnalysis]);
+
+  // Load snapshot when commit changes
+  useEffect(() => {
+    if (!activeCommitSha || !activeAnalysis || activeAnalysis.sourceType !== "github") {
+      return;
+    }
+
+    if (activeAnalysis.githubOwner && activeAnalysis.githubRepo) {
+      loadSnapshot(activeAnalysis.githubOwner, activeAnalysis.githubRepo, activeCommitSha);
+    }
+  }, [activeCommitSha, activeAnalysis]);
 
   const handleSourceChange = (source: SourceType) => {
     setSourceType(source);
@@ -243,7 +349,25 @@ export default function CodeGraphPage() {
         // Automatically fetch explanation with file summaries
         await handleExplain(analyzeData.graph, fileSummaries);
         
-        // Save analysis after explanation (will be done in handleExplain completion)
+        // Save analysis after explanation is complete (for GitHub projects)
+        if (summary && architectureExplanation && technologies.length > 0) {
+          const displayName = getDisplayName(projectIdForAnalysis, sourceType, githubUrl, projects.find(p => p.id === projectIdForAnalysis));
+          // Extract owner/repo from GitHub URL
+          const githubUrlMatch = githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+          saveAnalysis({
+            projectId: projectIdForAnalysis,
+            displayName,
+            sourceType,
+            fileGraph: analyzeData.graph,
+            fileSummaries: fileSummaries,
+            technologies,
+            summaryText: summary,
+            architectureExplanation,
+            githubOwner: githubUrlMatch ? githubUrlMatch[1] : undefined,
+            githubRepo: githubUrlMatch ? githubUrlMatch[2].replace(/\.git$/, "") : undefined,
+          });
+        }
+        
         setIsAnalyzing(false);
         return;
       } catch (error) {
@@ -313,7 +437,7 @@ export default function CodeGraphPage() {
       // Automatically fetch explanation
       await handleExplain(data.graph, data.fileSummaries);
       
-      // Save analysis after explanation is complete
+      // Save analysis after explanation is complete (for local/internal projects only - GitHub handled separately)
       if (summary && architectureExplanation && technologies.length > 0) {
         const displayName = getDisplayName(projectIdForAnalysis, sourceType, githubUrl, projects.find(p => p.id === projectIdForAnalysis));
         const savedAnalysis = saveAnalysis({
@@ -373,6 +497,8 @@ export default function CodeGraphPage() {
       if (currentProjectId && graph && data.summary && data.architectureExplanation) {
         const project = projects.find(p => p.id === currentProjectId);
         const displayName = getDisplayName(currentProjectId, sourceType, githubUrl, project);
+        // Extract owner/repo from GitHub URL if this is a GitHub project
+        const githubUrlMatch = sourceType === "github" ? githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/) : null;
         const savedAnalysis = saveAnalysis({
           projectId: currentProjectId,
           displayName,
@@ -382,6 +508,8 @@ export default function CodeGraphPage() {
           technologies: data.technologies || [],
           summaryText: data.summary,
           architectureExplanation: data.architectureExplanation,
+          githubOwner: githubUrlMatch ? githubUrlMatch[1] : undefined,
+          githubRepo: githubUrlMatch ? githubUrlMatch[2].replace(/\.git$/, "") : undefined,
         });
         
         // Refresh analyses list
@@ -532,16 +660,17 @@ export default function CodeGraphPage() {
   };
 
   // Build structure tree from graph
-  const buildStructureTree = () => {
-    if (!graph) return null;
+  const buildStructureTree = (graphToUse?: CodeGraph | null) => {
+    const graphForTree = graphToUse || graph;
+    if (!graphForTree) return null;
     const folderMap = new Map<string, { name: string; files: string[]; folders: string[] }>();
     const rootFiles: string[] = [];
-    graph.nodes.forEach(node => {
+    graphForTree.nodes.forEach((node: any) => {
       if (node.type === "folder") folderMap.set(node.path, { name: node.name, files: [], folders: [] });
     });
-    graph.edges.forEach(edge => {
-      const fromNode = graph.nodes.find(n => n.id === edge.from);
-      const toNode = graph.nodes.find(n => n.id === edge.to);
+    graphForTree.edges.forEach((edge: any) => {
+      const fromNode = graphForTree.nodes.find((n: any) => n.id === edge.from);
+      const toNode = graphForTree.nodes.find((n: any) => n.id === edge.to);
       if (fromNode && toNode && edge.type === "contains") {
         if (toNode.type === "file") {
           const folder = folderMap.get(fromNode.path);
@@ -569,10 +698,10 @@ export default function CodeGraphPage() {
       );
     };
     const rootFolders = Array.from(folderMap.keys()).filter(path => {
-      const node = graph.nodes.find(n => n.path === path && n.type === "folder");
+      const node = graphForTree.nodes.find((n: any) => n.path === path && n.type === "folder");
       if (!node) return false;
-      return !graph.edges.some(e => {
-        const fromNode = graph.nodes.find(n => n.id === e.from);
+      return !graphForTree.edges.some((e: any) => {
+        const fromNode = graphForTree.nodes.find((n: any) => n.id === e.from);
         return fromNode && fromNode.path !== "" && fromNode.name !== "root" && e.to === node.id;
       });
     });
@@ -782,7 +911,73 @@ export default function CodeGraphPage() {
             <>
               <section>
                 <div className="glass-strong rounded-2xl p-8 shadow-soft-xl">
-                  <h2 className="text-2xl font-bold mb-6 text-white">Project Summary</h2>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-white">Project Summary</h2>
+                    {activeAnalysis && (
+                      <button
+                        onClick={handleReanalyze}
+                        className="text-xs px-3 py-1 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 rounded transition-colors"
+                      >
+                        Re-analyze
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Architecture Time Slider - Only for GitHub projects */}
+                  {activeAnalysis && activeAnalysis.sourceType === "github" && commits.length > 0 && (
+                    <div className="mb-6 p-4 glass rounded-lg border border-gray-700">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-white">Architecture Timeline</h3>
+                        {activeCommitSha && (
+                          <span className="text-xs text-gray-400">
+                            {(() => {
+                              const commit = commits.find(c => c.sha === activeCommitSha);
+                              if (commit) {
+                                const date = new Date(commit.date);
+                                return `Viewing: ${date.toLocaleDateString()} commit`;
+                              }
+                              return "Viewing: Latest";
+                            })()}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <input
+                        type="range"
+                        min="0"
+                        max={commits.length - 1}
+                        value={commits.findIndex(c => c.sha === activeCommitSha) >= 0 ? commits.findIndex(c => c.sha === activeCommitSha) : 0}
+                        onChange={(e) => {
+                          const index = parseInt(e.target.value);
+                          const commit = commits[index];
+                          if (commit) {
+                            handleSliderChange(commit.sha);
+                          }
+                        }}
+                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      />
+                      
+                      <div className="flex justify-between text-xs text-gray-500 mt-2">
+                        <span>Newest</span>
+                        <span>Oldest</span>
+                      </div>
+
+                      {isLoadingSnapshot && (
+                        <div className="mt-3 text-sm text-gray-400">Loading snapshot...</div>
+                      )}
+
+                      {comparisonExplanation && !isComparing && (
+                        <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                          <h4 className="text-sm font-semibold text-cyan-400 mb-2">Architecture Evolution</h4>
+                          <p className="text-sm text-gray-300 leading-relaxed">{comparisonExplanation}</p>
+                        </div>
+                      )}
+
+                      {isComparing && (
+                        <div className="mt-4 text-sm text-gray-400">Analyzing changes...</div>
+                      )}
+                    </div>
+                  )}
                   
                   {isExplaining ? (
                     <div className="text-gray-400 text-sm">Generating explanation...</div>
@@ -822,7 +1017,7 @@ export default function CodeGraphPage() {
                 <div className="glass-strong rounded-2xl p-8 shadow-soft-xl">
                   <h2 className="text-2xl font-bold mb-6 text-white">Project Structure</h2>
                   <div className="glass rounded-lg p-4 border border-gray-700 max-h-96 overflow-y-auto ide-scrollbar">
-                    {buildStructureTree() || <div className="text-gray-500 text-sm">No structure data</div>}
+                    {buildStructureTree(activeSnapshotGraph || graph) || <div className="text-gray-500 text-sm">No structure data</div>}
                   </div>
                 </div>
               </section>

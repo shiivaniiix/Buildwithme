@@ -21,6 +21,9 @@ export interface ProjectAnalysis {
   technologies: Array<{ name: string; description: string; deepLink: string }>;
   summaryText: string; // AI-generated summary
   architectureExplanation: string; // AI-generated architecture explanation
+  // GitHub-specific metadata
+  githubOwner?: string; // GitHub repository owner
+  githubRepo?: string; // GitHub repository name
   createdAt: number;
   updatedAt: number;
 }

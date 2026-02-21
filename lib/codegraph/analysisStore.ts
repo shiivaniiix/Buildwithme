@@ -60,6 +60,8 @@ export function saveAnalysis(analysis: Omit<ProjectAnalysis, "id" | "userId" | "
     ...analysis,
     displayName: analysis.displayName || analysis.projectId,
     sourceType: analysis.sourceType || "internal",
+    githubOwner: analysis.githubOwner,
+    githubRepo: analysis.githubRepo,
   };
   if (typeof window === "undefined") {
     throw new Error("Cannot save analysis on server side");
