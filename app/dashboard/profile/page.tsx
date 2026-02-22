@@ -1,39 +1,117 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import Footer from "@/components/Footer";
 
 type ProfileSection = "profile" | "account" | "security" | "preferences" | "danger";
 
+interface UserProfile {
+  id: string;
+  clerkId: string;
+  email: string;
+  username: string | null;
+  name: string | null;
+  imageUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export default function ProfilePage() {
+  const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<ProfileSection>("profile");
+  const [dbUser, setDbUser] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Profile state
-  const [username, setUsername] = useState("user1234");
+  const [username, setUsername] = useState("");
   const [name, setName] = useState("");
-  const [location, setLocation] = useState("");
-  const [bio, setBio] = useState("");
-  const [projects, setProjects] = useState("");
-  const [links, setLinks] = useState<Array<{ id: string; label: string; url: string }>>([
-    { id: "1", label: "GitHub", url: "" },
-    { id: "2", label: "LinkedIn", url: "" },
-    { id: "3", label: "LeetCode", url: "" },
-  ]);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  // Account state
-  const [email, setEmail] = useState("user@example.com");
-  const [accountCreated] = useState(new Date().toLocaleDateString());
+  // Fetch user data from database
+  useEffect(() => {
+    async function fetchUserData() {
+      if (!clerkLoaded || !clerkUser) {
+        return;
+      }
 
-  // Security state
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+      try {
+        setIsLoading(true);
+        const response = await fetch("/api/user/profile");
+        if (response.ok) {
+          const data = await response.json();
+          setDbUser(data.user);
+          setUsername(data.user.username || "");
+          setName(data.user.name || "");
+        } else {
+          console.error("Failed to fetch user profile");
+        }
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
 
-  // Preferences state
-  const [theme, setTheme] = useState<"dark" | "light" | "system">("dark");
+    fetchUserData();
+  }, [clerkLoaded, clerkUser]);
 
-  // Danger zone state
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  // Redirect if no username (needs profile completion)
+  useEffect(() => {
+    if (dbUser && !dbUser.username && !isLoading) {
+      router.push("/dashboard/complete-profile");
+    }
+  }, [dbUser, isLoading, router]);
+
+  const handleSaveProfile = async () => {
+    if (!username.trim()) {
+      setError("Username is required");
+      return;
+    }
+
+    // Validate username format
+    const usernameRegex = /^[a-z0-9_]{3,20}$/;
+    if (!usernameRegex.test(username.toLowerCase())) {
+      setError("Username must be 3-20 characters, lowercase letters, numbers, and underscores only");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: username.toLowerCase().trim(),
+          name: name.trim() || null,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDbUser(data.user);
+        setSuccess("Profile updated successfully!");
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || "Failed to update profile");
+      }
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      setError("An error occurred while updating your profile");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const sidebarItems: Array<{ id: ProfileSection; label: string; icon: React.ReactNode }> = [
     {
@@ -84,70 +162,19 @@ export default function ProfilePage() {
     },
   ];
 
-  const handleAddLink = () => {
-    setLinks([...links, { id: Date.now().toString(), label: "", url: "" }]);
-  };
+  if (isLoading || !clerkLoaded || !clerkUser) {
+    return (
+      <main className="min-h-screen code-pattern relative">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 py-32">
+          <div className="text-center text-gray-400">Loading profile...</div>
+        </div>
+      </main>
+    );
+  }
 
-  const handleRemoveLink = (id: string) => {
-    setLinks(links.filter(link => link.id !== id));
-  };
-
-  const handleUpdateLink = (id: string, field: "label" | "url", value: string) => {
-    setLinks(links.map(link => 
-      link.id === id ? { ...link, [field]: value } : link
-    ));
-  };
-
-  const handleSaveProfile = () => {
-    // Save to localStorage (UI-only for now)
-    const profileData = {
-      username,
-      name,
-      location,
-      bio,
-      projects,
-      links,
-    };
-    localStorage.setItem("userProfile", JSON.stringify(profileData));
-    alert("Profile saved! (UI-only, no backend persistence)");
-  };
-
-  const handleSaveAccount = () => {
-    localStorage.setItem("userEmail", email);
-    alert("Email updated! (UI-only, no backend persistence)");
-  };
-
-  const handleChangePassword = () => {
-    if (newPassword !== confirmPassword) {
-      alert("New passwords do not match");
-      return;
-    }
-    if (newPassword.length < 8) {
-      alert("Password must be at least 8 characters");
-      return;
-    }
-    alert("Password changed! (UI-only, no backend persistence)");
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-  };
-
-  const handleThemeChange = (newTheme: "dark" | "light" | "system") => {
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    // Apply theme (UI-only for now)
-    if (newTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else if (newTheme === "light") {
-      document.documentElement.classList.remove("dark");
-    }
-    // System theme would check prefers-color-scheme
-  };
-
-  const handleDeleteAccount = () => {
-    setShowDeleteModal(false);
-    alert("Account deletion requested. (UI-only, no backend action)");
-  };
+  const displayName = dbUser?.name || clerkUser.firstName || clerkUser.emailAddresses[0]?.emailAddress || "User";
+  const displayEmail = clerkUser.emailAddresses[0]?.emailAddress || "";
+  const displayImage = dbUser?.imageUrl || clerkUser.imageUrl || "";
 
   return (
     <main className="min-h-screen code-pattern relative">
@@ -186,17 +213,48 @@ export default function ProfilePage() {
                     <p className="text-gray-400 text-sm">Manage your public profile information</p>
                   </div>
 
+                  {/* Profile Image */}
+                  <div className="flex items-center gap-6">
+                    {displayImage && (
+                      <img
+                        src={displayImage}
+                        alt={displayName}
+                        className="w-20 h-20 rounded-full border-2 border-cyan-500/30"
+                      />
+                    )}
+                    <div>
+                      <p className="text-sm text-gray-400">Profile image is managed in your Clerk account settings</p>
+                    </div>
+                  </div>
+
+                  {error && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <p className="text-red-400 text-sm">{error}</p>
+                    </div>
+                  )}
+
+                  {success && (
+                    <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                      <p className="text-green-400 text-sm">{success}</p>
+                    </div>
+                  )}
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-white mb-2">
-                        Username
+                        Username <span className="text-red-400">*</span>
                       </label>
                       <input
                         type="text"
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
+                        onChange={(e) => {
+                          setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""));
+                          setError(null);
+                        }}
+                        placeholder="username"
+                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400"
                       />
+                      <p className="mt-1 text-xs text-gray-500">3-20 characters, lowercase letters, numbers, and underscores only</p>
                     </div>
 
                     <div>
@@ -212,93 +270,13 @@ export default function ProfilePage() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Location
-                      </label>
-                      <input
-                        type="text"
-                        value={location}
-                        onChange={(e) => setLocation(e.target.value)}
-                        placeholder="City, Country"
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Bio / Tech Stack
-                      </label>
-                      <textarea
-                        value={bio}
-                        onChange={(e) => setBio(e.target.value)}
-                        placeholder="Tell us about yourself and your tech stack..."
-                        rows={4}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Projects
-                      </label>
-                      <textarea
-                        value={projects}
-                        onChange={(e) => setProjects(e.target.value)}
-                        placeholder="List your projects or describe your work..."
-                        rows={3}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block text-sm font-medium text-white">
-                          Links
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleAddLink}
-                          className="text-xs text-cyan-400 hover:text-cyan-300"
-                        >
-                          + Add Link
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {links.map((link) => (
-                          <div key={link.id} className="flex gap-2">
-                            <input
-                              type="text"
-                              value={link.label}
-                              onChange={(e) => handleUpdateLink(link.id, "label", e.target.value)}
-                              placeholder="Label (e.g., GitHub)"
-                              className="flex-1 px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 text-sm"
-                            />
-                            <input
-                              type="url"
-                              value={link.url}
-                              onChange={(e) => handleUpdateLink(link.id, "url", e.target.value)}
-                              placeholder="URL"
-                              className="flex-1 px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveLink(link.id)}
-                              className="px-3 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
                     <div className="pt-4">
                       <button
                         onClick={handleSaveProfile}
-                        className="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
+                        disabled={isSaving}
+                        className="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Save Profile
+                        {isSaving ? "Saving..." : "Save Profile"}
                       </button>
                     </div>
                   </div>
@@ -319,29 +297,18 @@ export default function ProfilePage() {
                         Account Created
                       </label>
                       <div className="px-4 py-2 bg-gray-800/30 border border-gray-700 rounded-lg text-gray-400 text-sm">
-                        {accountCreated}
+                        {dbUser?.createdAt ? new Date(dbUser.createdAt).toLocaleDateString() : "N/A"}
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-white mb-2">
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
                         Email
                       </label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
-                      />
-                    </div>
-
-                    <div className="pt-4">
-                      <button
-                        onClick={handleSaveAccount}
-                        className="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
-                      >
-                        Save Changes
-                      </button>
+                      <div className="px-4 py-2 bg-gray-800/30 border border-gray-700 rounded-lg text-gray-400 text-sm">
+                        {displayEmail}
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">Email is managed in your Clerk account settings</p>
                     </div>
                   </div>
                 </div>
@@ -352,55 +319,12 @@ export default function ProfilePage() {
                 <div className="space-y-6">
                   <div>
                     <h2 className="text-2xl font-bold text-white mb-2">Security</h2>
-                    <p className="text-gray-400 text-sm">Change your password</p>
+                    <p className="text-gray-400 text-sm">Password and security settings are managed in your Clerk account</p>
                   </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Current Password
-                      </label>
-                      <input
-                        type="password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">Must be at least 8 characters</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Confirm New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
-                      />
-                    </div>
-
-                    <div className="pt-4">
-                      <button
-                        onClick={handleChangePassword}
-                        className="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
-                      >
-                        Change Password
-                      </button>
-                    </div>
+                  <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <p className="text-blue-400 text-sm">
+                      Use the UserButton in the navbar to access your Clerk account settings for password changes and security options.
+                    </p>
                   </div>
                 </div>
               )}
@@ -412,25 +336,8 @@ export default function ProfilePage() {
                     <h2 className="text-2xl font-bold text-white mb-2">Preferences</h2>
                     <p className="text-gray-400 text-sm">Customize your experience</p>
                   </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Theme
-                      </label>
-                      <select
-                        value={theme}
-                        onChange={(e) => handleThemeChange(e.target.value as "dark" | "light" | "system")}
-                        className="w-full px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
-                      >
-                        <option value="dark">Dark</option>
-                        <option value="light">Light</option>
-                        <option value="system">System</option>
-                      </select>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Theme preference is saved locally
-                      </p>
-                    </div>
+                  <div className="p-4 bg-gray-800/30 border border-gray-700 rounded-lg">
+                    <p className="text-gray-400 text-sm">Preferences coming soon</p>
                   </div>
                 </div>
               )}
@@ -442,18 +349,11 @@ export default function ProfilePage() {
                     <h2 className="text-2xl font-bold text-white mb-2">Danger Zone</h2>
                     <p className="text-gray-400 text-sm">Irreversible and destructive actions</p>
                   </div>
-
                   <div className="border border-red-500/30 rounded-lg p-6 bg-red-500/10">
                     <h3 className="text-lg font-semibold text-white mb-2">Delete Account</h3>
                     <p className="text-gray-400 text-sm mb-4">
-                      Once you delete your account, there is no going back. Please be certain.
+                      Account deletion is managed through your Clerk account settings. Use the UserButton to access account management.
                     </p>
-                    <button
-                      onClick={() => setShowDeleteModal(true)}
-                      className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Delete Account
-                    </button>
                   </div>
                 </div>
               )}
@@ -462,38 +362,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Delete Account Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="glass rounded-xl p-6 border border-red-500/30 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-white mb-2">Delete Account</h3>
-            <p className="text-gray-400 text-sm mb-6">
-              Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteAccount}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Delete Account
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <Footer />
     </main>
   );
 }
-
-
-
-
-

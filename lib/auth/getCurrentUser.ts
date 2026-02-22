@@ -27,6 +27,9 @@ export interface CurrentUser {
   id: string;
   clerkId: string;
   email: string;
+  username: string | null;
+  name: string | null;
+  imageUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

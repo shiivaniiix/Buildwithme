@@ -13,13 +13,16 @@ model User {
   id        String   @id // Clerk user ID
   clerkId   String   @unique // Same as id, kept for clarity
   email     String
+  username  String?  @unique // Unique username for public profiles
+  name      String? // Full name from Clerk
+  imageUrl  String? // Profile image URL from Clerk
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  projects         Project[]
-  projectAnalyses  ProjectAnalysis[]
-  chatSessions     ChatSession[]
+  projects        Project[]
+  projectAnalyses ProjectAnalysis[]
+  chatSessions    ChatSession[]
 
   @@map("users")
 }
@@ -35,7 +38,7 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   projectAnalyses ProjectAnalysis[]
 
   @@map("projects")
@@ -53,8 +56,8 @@ model ProjectAnalysis {
   updatedAt     DateTime @updatedAt
 
   // Relations
-  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   chatSessions ChatSession[]
 
   @@map("project_analyses")
