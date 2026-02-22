@@ -13,7 +13,7 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/login",
+  "/login", // Legacy route - redirects to /sign-in
   "/signup",
   "/community(.*)",
   "/learn(.*)",

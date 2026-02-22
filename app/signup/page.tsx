@@ -91,15 +91,15 @@ export default function SignupPage() {
               </button>
             </form>
 
-            {/* Login Link */}
+            {/* Sign In Link */}
             <div className="mt-6 text-center">
               <p className="text-gray-400">
                 Already have an account?{" "}
                 <Link 
-                  href="/login" 
+                  href="/sign-in" 
                   className="text-cyan-400 hover:text-cyan-300 font-semibold underline transition-colors"
                 >
-                  Login
+                  Sign In
                 </Link>
               </p>
             </div>

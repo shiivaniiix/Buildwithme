@@ -2,21 +2,18 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useUser, useClerk } from "@clerk/nextjs";
-import ProfileMenu from "./ProfileMenu";
+import { useUser } from "@clerk/nextjs";
+import { UserButton } from "@clerk/nextjs";
 
 /**
  * Navbar Component
  * 
  * Site navigation bar with links to main pages.
- * Auth-aware: shows Login or Logout button based on authentication status.
+ * Auth-aware: shows Sign In button or Clerk UserButton based on authentication status.
  * Uses Clerk for authentication.
  */
 export default function Navbar() {
-  const router = useRouter();
-  const { isSignedIn, user } = useUser();
-  const clerk = useClerk();
+  const { isSignedIn } = useUser();
 
 
   return (
@@ -62,7 +59,14 @@ export default function Navbar() {
               </Link>
             </motion.div>
             {isSignedIn ? (
-              <ProfileMenu />
+              <UserButton 
+                appearance={{
+                  elements: {
+                    avatarBox: "w-9 h-9",
+                  },
+                }}
+                afterSignOutUrl="/"
+              />
             ) : (
               <Link href="/sign-in">
                 <motion.button

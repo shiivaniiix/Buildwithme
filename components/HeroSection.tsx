@@ -231,7 +231,7 @@ export default function HeroSection() {
           variants={fadeInUpVariants}
         >
           {/* Primary CTA with premium ripple effect */}
-          <Link href="/login">
+          <Link href="/sign-in">
             <motion.button
               className="px-8 py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-xl text-lg relative overflow-hidden group shadow-soft-lg"
               whileHover={buttonHoverPrimary}
