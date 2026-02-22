@@ -14,7 +14,7 @@ import Footer from "@/components/Footer";
  * Matches Buildwithme design system.
  */
 export default function SignInPage() {
-  const { isSignedIn } = useUser();
+  const { isSignedIn, isLoaded: userLoaded } = useUser();
   const { isLoaded, signIn, setActive } = useSignIn();
   const router = useRouter();
   
@@ -23,12 +23,12 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated - must check isLoaded to avoid premature redirect
   useEffect(() => {
-    if (isSignedIn) {
-      router.push("/dashboard");
+    if (userLoaded && isSignedIn) {
+      router.replace("/dashboard");
     }
-  }, [isSignedIn, router]);
+  }, [isSignedIn, userLoaded, router]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,8 +52,8 @@ export default function SignInPage() {
       // Complete the sign-in process
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
-        // Redirect to dashboard
-        router.push("/dashboard");
+        // Redirect to dashboard using replace to avoid back button issues
+        router.replace("/dashboard");
       } else {
         // Handle additional verification steps if needed
         setError("Please check your email for verification.");
@@ -90,9 +90,26 @@ export default function SignInPage() {
     }
   };
 
-  // Don't render if already signed in (will redirect)
+  // Show loading state while checking authentication
+  if (!userLoaded) {
+    return (
+      <main className="min-h-screen code-pattern relative">
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          <div className="text-gray-400">Loading...</div>
+        </div>
+      </main>
+    );
+  }
+
+  // Don't render form if already signed in (redirect will happen via useEffect)
   if (isSignedIn) {
-    return null;
+    return (
+      <main className="min-h-screen code-pattern relative">
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          <div className="text-gray-400">Redirecting...</div>
+        </div>
+      </main>
+    );
   }
 
   return (
