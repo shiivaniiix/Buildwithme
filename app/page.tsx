@@ -18,13 +18,7 @@ import { pageLoadVariants } from "@/lib/animations";
 
 export default function Home() {
   return (
-    <motion.main
-      className="min-h-screen code-pattern relative"
-      variants={pageLoadVariants}
-      initial="initial"
-      animate="animate"
-    >
-      {/* All sections have their own scroll-triggered animations via useInView */}
+    <main className="min-h-screen code-pattern relative">
       <div className="relative z-10">
         <HeroSection />
         <WhatIsSection />
@@ -33,7 +27,6 @@ export default function Home() {
         <SupportSection />
         <Footer />
       </div>
-    </motion.main>
+    </main>
   );
 }
-
