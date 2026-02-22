@@ -28,9 +28,8 @@ export default clerkMiddleware((auth, request: NextRequest) => {
   // Protect routes that require authentication
   if (isProtectedRoute(request) && !userId) {
     // Redirect to sign-in page if not authenticated
-    const signInUrl = new URL("/sign-in", request.url);
-    signInUrl.searchParams.set("redirect_url", request.url);
-    return NextResponse.redirect(signInUrl);
+    // ClerkProvider handles redirect to /dashboard after successful login
+    return NextResponse.redirect(new URL("/sign-in", request.url));
   }
 
   // Allow public routes
