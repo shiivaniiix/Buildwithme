@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useUser, useClerk } from "@clerk/nextjs";
 import ProfileMenu from "./ProfileMenu";
 
 /**
@@ -11,25 +11,12 @@ import ProfileMenu from "./ProfileMenu";
  * 
  * Site navigation bar with links to main pages.
  * Auth-aware: shows Login or Logout button based on authentication status.
+ * Uses Clerk for authentication.
  */
 export default function Navbar() {
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Check authentication status by checking for auth cookie
-  useEffect(() => {
-    const checkAuth = () => {
-      const cookies = document.cookie.split(";");
-      const authCookie = cookies.find((cookie) => cookie.trim().startsWith("auth="));
-      const isAuth = authCookie?.split("=")[1] === "true";
-      setIsAuthenticated(isAuth);
-    };
-
-    checkAuth();
-    // Re-check periodically to catch auth changes
-    const interval = setInterval(checkAuth, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const { isSignedIn, user } = useUser();
+  const clerk = useClerk();
 
 
   return (
@@ -74,16 +61,16 @@ export default function Navbar() {
                 Support
               </Link>
             </motion.div>
-            {isAuthenticated ? (
+            {isSignedIn ? (
               <ProfileMenu />
             ) : (
-              <Link href="/login">
+              <Link href="/sign-in">
                 <motion.button
                   className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg text-sm"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  Login
+                  Sign In
                 </motion.button>
               </Link>
             )}

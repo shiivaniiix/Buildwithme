@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
+import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 
 /**
  * POST /api/codegraph/chat/send
  * 
  * Sends a message in a chat session and returns AI reply.
  * Body: { sessionId, projectId, graph, fileSummaries, messages, newQuestion }
+ * 
+ * Protected route: Requires authentication via Clerk
  */
 export async function POST(request: NextRequest) {
   try {
+    // Get current authenticated user
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in to continue." },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { sessionId, projectId, graph, fileSummaries, messages, newQuestion } = body;
 

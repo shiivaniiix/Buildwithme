@@ -59,10 +59,10 @@ export async function getOrCreateUser(): Promise<GetOrCreateUserResult> {
       };
     }
 
-    // Check if user exists in database
+    // Check if user exists in database using clerkId
     let user = await prisma.user.findUnique({
       where: {
-        id: userId,
+        clerkId: userId,
       },
     });
 
@@ -70,8 +70,8 @@ export async function getOrCreateUser(): Promise<GetOrCreateUserResult> {
     if (!user) {
       user = await prisma.user.create({
         data: {
-          id: userId,
-          clerkId: userId, // Same as id, kept for clarity
+          id: userId, // Use Clerk user ID as primary key
+          clerkId: userId, // Store Clerk user ID
           email: email,
         },
       });

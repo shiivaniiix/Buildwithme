@@ -2,22 +2,43 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Define protected routes
-const isProtectedRoute = createRouteMatcher(["/dashboard(.*)"]);
+// Define protected routes that require authentication
+const isProtectedRoute = createRouteMatcher([
+  "/dashboard(.*)",
+  "/CodeGraph(.*)",
+]);
+
+// Define public routes that should be accessible without authentication
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/login",
+  "/signup",
+  "/community(.*)",
+  "/learn(.*)",
+  "/docs(.*)",
+  "/support(.*)",
+]);
 
 export default clerkMiddleware((auth, request: NextRequest) => {
-  // Protect dashboard routes
-  if (isProtectedRoute(request)) {
-    const { userId } = auth();
-    
-    if (!userId) {
-      // Redirect to sign-in page if not authenticated
-      const signInUrl = new URL("/sign-in", request.url);
-      signInUrl.searchParams.set("redirect_url", request.url);
-      return NextResponse.redirect(signInUrl);
-    }
+  const { userId } = auth();
+  const { pathname } = request.nextUrl;
+
+  // Protect routes that require authentication
+  if (isProtectedRoute(request) && !userId) {
+    // Redirect to sign-in page if not authenticated
+    const signInUrl = new URL("/sign-in", request.url);
+    signInUrl.searchParams.set("redirect_url", request.url);
+    return NextResponse.redirect(signInUrl);
   }
 
+  // Allow public routes
+  if (isPublicRoute(request)) {
+    return NextResponse.next();
+  }
+
+  // For all other routes, continue normally
   return NextResponse.next();
 });
 

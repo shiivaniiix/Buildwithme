@@ -11,6 +11,10 @@ export default function SignUpPage() {
               card: "glass-strong shadow-soft-xl",
             },
           }}
+          routing="path"
+          path="/sign-up"
+          signInUrl="/sign-in"
+          afterSignUpUrl="/dashboard"
         />
       </div>
     </div>

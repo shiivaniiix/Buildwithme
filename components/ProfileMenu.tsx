@@ -2,16 +2,19 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useUser, useClerk } from "@clerk/nextjs";
 import Link from "next/link";
 
 /**
  * Profile Menu Component
  * 
  * Dropdown menu with profile options (Edit Profile, Logout).
- * Replaces direct logout button in navbar/headers.
+ * Uses Clerk for authentication.
  */
 export default function ProfileMenu() {
   const router = useRouter();
+  const { user } = useUser();
+  const clerk = useClerk();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -34,8 +37,8 @@ export default function ProfileMenu() {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/logout", { method: "POST" });
-      router.push("/login");
+      await clerk.signOut();
+      router.push("/");
     } catch (error) {
       console.error("Logout failed:", error);
     }
@@ -48,8 +51,10 @@ export default function ProfileMenu() {
     setIsOpen(false);
   };
 
-  // Get user initial (placeholder - can be enhanced with actual user data)
-  const userInitial = "U";
+  // Get user initial from Clerk user email or name
+  const userInitial = user?.firstName?.charAt(0).toUpperCase() || 
+                      user?.emailAddresses[0]?.emailAddress?.charAt(0).toUpperCase() || 
+                      "U";
 
   return (
     <div className="relative" ref={menuRef}>
