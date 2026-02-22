@@ -10,8 +10,8 @@ datasource db {
 }
 
 model User {
-  id        String   @id
-  clerkId   String   @unique
+  id        String   @id // Clerk user ID
+  clerkId   String   @unique // Same as id, kept for clarity
   email     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
