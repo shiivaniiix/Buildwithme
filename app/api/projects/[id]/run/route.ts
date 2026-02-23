@@ -11,8 +11,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import { prisma } from "@/lib/prisma";
-
-const RUNNER_SERVICE_URL = process.env.RUNNER_SERVICE_URL || "http://localhost:3001";
+import { env } from "@/lib/env";
 
 type ExecutionFile = {
   path: string;
@@ -146,7 +145,7 @@ export async function POST(
     }
 
     // Send to runner service
-    const runnerResponse = await fetch(`${RUNNER_SERVICE_URL}/run`, {
+    const runnerResponse = await fetch(`${env.RUNNER_SERVICE_URL}/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

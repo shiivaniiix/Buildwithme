@@ -11,6 +11,7 @@ import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { WebhookEvent } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/lib/env";
 
 export async function POST(req: Request) {
   // Get the Svix headers for verification
@@ -30,11 +31,14 @@ export async function POST(req: Request) {
   const payload = await req.json();
   const body = JSON.stringify(payload);
 
-  // Get the webhook secret
-  const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
-
+  // Get the webhook secret (optional, only required if using webhooks)
+  const WEBHOOK_SECRET = env.CLERK_WEBHOOK_SECRET;
+  
   if (!WEBHOOK_SECRET) {
-    throw new Error("Please add CLERK_WEBHOOK_SECRET from Clerk Dashboard to .env");
+    return new Response(
+      JSON.stringify({ error: "CLERK_WEBHOOK_SECRET is not configured. Webhooks require this secret." }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 
   // Create a new Svix instance with the webhook secret
