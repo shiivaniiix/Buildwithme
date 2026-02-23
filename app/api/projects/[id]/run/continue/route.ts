@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, deleteSession, updateSessionStdout, updateSessionStderr } from "@/lib/executionSessions";
 
@@ -37,7 +39,7 @@ interface ExecutionResponse {
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
+): Promise<Response> {
   try {
     const body: ContinueRequest = await request.json();
     const { sessionId, input } = body;
@@ -138,7 +140,7 @@ export async function POST(
 
     // Wait for more output or completion
     // Use a longer timeout and better detection for waiting state
-    return new Promise((resolve) => {
+    return new Promise<Response>((resolve) => {
       const CONTINUE_TIMEOUT = 10000; // 10 seconds - longer for programs that might process input
       let lastOutputTime = Date.now();
       let hasReceivedNewOutput = false;
