@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [editingName, setEditingName] = useState("");
   const [editingDescription, setEditingDescription] = useState("");
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Derive activities and skills from projects
   const activities = useMemo(() => deriveActivities(projects), [projects]);
@@ -24,21 +25,52 @@ export default function DashboardPage() {
     setProjects(getSortedProjects());
   }, []);
 
-  const handleCreateProject = (e: React.FormEvent) => {
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectName.trim()) return;
+    if (!projectName.trim() || isCreating) return;
 
-    const newProject: Project = {
-      id: Date.now().toString(),
-      name: projectName.trim(),
-      description: projectDescription.trim() || undefined,
-    };
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: projectName.trim(),
+          sourceType: "python", // Default language
+        }),
+      });
 
-    addProject(newProject);
-    setProjects(getSortedProjects());
-    setProjectName("");
-    setProjectDescription("");
-    setIsModalOpen(false);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create project");
+      }
+
+      const data = await response.json();
+      
+      // Convert database project to local format for compatibility
+      const newProject: Project = {
+        id: data.project.id,
+        name: data.project.name,
+        description: projectDescription.trim() || undefined,
+        language: data.project.sourceType as Project["language"],
+        createdAt: new Date(data.project.createdAt).getTime(),
+        updatedAt: new Date(data.project.updatedAt).getTime(),
+      };
+
+      // Also add to localStorage for backward compatibility
+      addProject(newProject);
+      setProjects(getSortedProjects());
+      setProjectName("");
+      setProjectDescription("");
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Error creating project:", error);
+      alert(error instanceof Error ? error.message : "Failed to create project. Please try again.");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleStartEdit = (project: Project) => {
@@ -362,9 +394,10 @@ export default function DashboardPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                  disabled={isCreating}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Project
+                  {isCreating ? "Creating..." : "Create Project"}
                 </button>
               </div>
             </form>

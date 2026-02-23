@@ -52,25 +52,54 @@ export default function ImportProjectPage() {
         throw new Error("Invalid response from server");
       }
 
-      // Create project
-      const projectId = Date.now().toString();
+      // Create project via API (uses Prisma auto-generated UUID)
+      const createProjectResponse = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: data.project.name,
+          sourceType: data.project.language || "python",
+          githubOwner: data.project.githubOwner,
+          githubRepo: data.project.githubRepo,
+        }),
+      });
+
+      if (!createProjectResponse.ok) {
+        const error = await createProjectResponse.json();
+        throw new Error(error.error || "Failed to create project");
+      }
+
+      const projectData = await createProjectResponse.json();
+      const projectId = projectData.project.id;
+
+      // Save files to database via API
+      for (const file of data.project.files) {
+        await fetch(`/api/projects/${projectId}/files`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: file.name,
+            path: file.name,
+            content: file.content,
+            isFolder: false,
+          }),
+        });
+      }
+
+      // Also add to localStorage for backward compatibility
       const newProject: Project = {
         id: projectId,
         name: data.project.name,
         description: data.project.description,
         language: data.project.language,
+        createdAt: new Date(projectData.project.createdAt).getTime(),
+        updatedAt: new Date(projectData.project.updatedAt).getTime(),
       };
-
       addProject(newProject);
-
-      // Save files
-      const codeFiles: CodeFile[] = data.project.files.map((file: { name: string; content: string }, index: number) => ({
-        id: `file_${projectId}_${index}`,
-        name: file.name,
-        content: file.content,
-      }));
-
-      saveProjectFiles(projectId, codeFiles);
 
       // Redirect to project page
       router.push(`/dashboard/projects/${projectId}`);
@@ -132,25 +161,52 @@ export default function ImportProjectPage() {
         throw new Error("Invalid response from server");
       }
 
-      // Create project
-      const projectId = Date.now().toString();
+      // Create project via API (uses Prisma auto-generated UUID)
+      const createProjectResponse = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: data.project.name,
+          sourceType: data.project.language || "python",
+        }),
+      });
+
+      if (!createProjectResponse.ok) {
+        const error = await createProjectResponse.json();
+        throw new Error(error.error || "Failed to create project");
+      }
+
+      const projectData = await createProjectResponse.json();
+      const projectId = projectData.project.id;
+
+      // Save files to database via API
+      for (const file of data.project.files) {
+        await fetch(`/api/projects/${projectId}/files`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: file.name,
+            path: file.name,
+            content: file.content,
+            isFolder: false,
+          }),
+        });
+      }
+
+      // Also add to localStorage for backward compatibility
       const newProject: Project = {
         id: projectId,
         name: data.project.name,
         description: data.project.description,
         language: data.project.language,
+        createdAt: new Date(projectData.project.createdAt).getTime(),
+        updatedAt: new Date(projectData.project.updatedAt).getTime(),
       };
-
       addProject(newProject);
-
-      // Save files
-      const codeFiles: CodeFile[] = data.project.files.map((file: { name: string; content: string }, index: number) => ({
-        id: `file_${projectId}_${index}`,
-        name: file.name,
-        content: file.content,
-      }));
-
-      saveProjectFiles(projectId, codeFiles);
 
       // Redirect to project page
       router.push(`/dashboard/projects/${projectId}`);
