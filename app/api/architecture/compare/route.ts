@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
 
@@ -7,7 +9,7 @@ import type { CodeGraph } from "@/lib/codegraph/graphTypes";
  * Compares two architecture graphs and generates AI explanation of changes.
  * Body: { currentGraph, historicalGraph }
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = await request.json();
     const { currentGraph, historicalGraph } = body;
@@ -63,22 +65,22 @@ export async function POST(request: NextRequest) {
     const addedFiles = Array.from(currentFilePaths).filter(path => !historicalFilePaths.has(path));
     const removedFiles = Array.from(historicalFilePaths).filter(path => !currentFilePaths.has(path));
 
-    const currentTechs = new Set(
+    const currentTechs = new Set<string>(
       (currentGraph.technologies || []).map((t: any) => t.name)
     );
-    const historicalTechs = new Set(
+    const historicalTechs = new Set<string>(
       (historicalGraph.technologies || []).map((t: any) => t.name)
     );
 
-    const addedTechs = Array.from(currentTechs).filter(tech => !historicalTechs.has(tech));
-    const removedTechs = Array.from(historicalTechs).filter(tech => !currentTechs.has(tech));
+    const addedTechs: string[] = Array.from(currentTechs).filter(tech => !historicalTechs.has(tech));
+    const removedTechs: string[] = Array.from(historicalTechs).filter(tech => !currentTechs.has(tech));
 
     // Build comparison data
     const comparisonData = {
       addedFiles: addedFiles.slice(0, 50), // Limit for token safety
       removedFiles: removedFiles.slice(0, 50),
-      addedTechnologies: Array.from(addedTechs),
-      removedTechnologies: Array.from(removedTechs),
+      addedTechnologies: addedTechs,
+      removedTechnologies: removedTechs,
       currentFileCount: currentFilePaths.size,
       historicalFileCount: historicalFilePaths.size,
       currentTechCount: currentTechs.size,
@@ -111,8 +113,8 @@ SNAPSHOT B (Current):
 CHANGES DETECTED:
 ${addedFiles.length > 0 ? `Added Files (${addedFiles.length}): ${addedFiles.slice(0, 10).join(", ")}${addedFiles.length > 10 ? "..." : ""}` : "No files added"}
 ${removedFiles.length > 0 ? `Removed Files (${removedFiles.length}): ${removedFiles.slice(0, 10).join(", ")}${removedFiles.length > 10 ? "..." : ""}` : "No files removed"}
-${addedTechs.size > 0 ? `Added Technologies: ${Array.from(addedTechs).join(", ")}` : "No technologies added"}
-${removedTechs.size > 0 ? `Removed Technologies: ${Array.from(removedTechs).join(", ")}` : "No technologies removed"}
+${addedTechs.length > 0 ? `Added Technologies: ${addedTechs.join(", ")}` : "No technologies added"}
+${removedTechs.length > 0 ? `Removed Technologies: ${removedTechs.join(", ")}` : "No technologies removed"}
 
 Provide a clear explanation of why these architectural changes occurred.`;
 
