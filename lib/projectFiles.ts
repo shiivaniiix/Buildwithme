@@ -280,21 +280,26 @@ export function getEntryFile(projectId: string): CodeFile | undefined {
 
 /**
  * Initialize project with default file if empty
+ * Matches file extension to selected language
  */
 export function ensureProjectHasFile(
   projectId: string,
-  language?: "python" | "javascript" | "typescript" | "html" | "css" | "json" | "java" | "c"
+  language?: "python" | "javascript" | "typescript" | "html" | "css" | "json" | "java" | "c" | "cpp" | "sql"
 ): CodeFile {
   const files = getProjectFiles(projectId);
   if (files.length === 0) {
+    // Match default file name to language
     const defaultName = language === "python" ? "main.py" :
-                       language === "javascript" ? "main.js" :
+                       language === "javascript" ? "index.js" :
                        language === "typescript" ? "main.ts" :
                        language === "html" ? "index.html" :
                        language === "css" ? "style.css" :
                        language === "json" ? "data.json" :
                        language === "java" ? "Main.java" :
-                       language === "c" ? "main.c" : "main.py";
+                       language === "c" ? "main.c" :
+                       language === "cpp" ? "main.cpp" :
+                       language === "sql" ? "main.sql" :
+                       "main.py"; // Default fallback
     const defaultContent = language === "java" 
       ? `public class Main {
     public static void main(String[] args) {

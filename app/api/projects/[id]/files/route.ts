@@ -61,36 +61,29 @@ export async function POST(
       );
     }
 
-    if (!path || typeof path !== "string" || path.trim().length === 0) {
-      return NextResponse.json(
-        { error: "File path is required" },
-        { status: 400 }
-      );
-    }
+    // Use name as path if path not provided
+    const filePath = path && typeof path === "string" && path.trim().length > 0 
+      ? path.trim() 
+      : name.trim();
 
     // Create file - let Prisma auto-generate UUID
     const file = await prisma.file.create({
       data: {
         projectId: projectId,
         name: name.trim(),
-        path: path.trim(),
+        path: filePath,
         content: content || "",
         isFolder: isFolder || false,
       },
     });
 
+    // Return file in format compatible with frontend CodeFile type
     return NextResponse.json({
-      success: true,
-      file: {
-        id: file.id,
-        projectId: file.projectId,
-        name: file.name,
-        path: file.path,
-        content: file.content,
-        isFolder: file.isFolder,
-        createdAt: file.createdAt.toISOString(),
-        updatedAt: file.updatedAt.toISOString(),
-      },
+      id: file.id,
+      name: file.name,
+      path: file.path,
+      content: file.content,
+      isFolder: file.isFolder,
     });
   } catch (error) {
     console.error("Error creating file:", error);

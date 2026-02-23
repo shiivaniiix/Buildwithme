@@ -4,6 +4,7 @@ import Link from "next/link";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { getProjectById, updateProjectLanguage, updateProjectLastOpened, getCurrentUserId, addProject, updateProjectEntryFile, type Project } from "@/lib/projects";
 import ProfileMenu from "@/components/ProfileMenu";
+import EmptyState from "@/components/EmptyState";
 import { getSteps, addStep, updateStepStatus, updateStepBlockedReason, updateStepCode, getStepById, canCompleteStep, explainStepCompletion, getActiveFileContent, type Step } from "@/lib/steps";
 import { getProjectFiles, addProjectFile, addProjectFolder, deleteProjectFile, renameProjectFile, updateProjectFileContent, getProjectFileContent, getEntryFile, getEntryFileForLanguage, getEntryFileNameForLanguage, detectEntryFile, ensureProjectHasFile, getProjectFile, getProjectFileById, fileNameExists, type CodeFile } from "@/lib/projectFiles";
 import { detectEntryFileWithAI, type AIEntryFileResponse } from "@/lib/aiEntryFileDetection";
@@ -16,26 +17,20 @@ const isLanguageExecutable = (language: string | undefined): boolean => {
   return language === "python" || language === "javascript" || language === "java" || language === "c";
 };
 
-// Helper function to get language display name with status
-const getLanguageDisplayName = (language: string): string => {
-  const languageNames: Record<string, string> = {
-    python: "Python",
-    javascript: "JavaScript",
-    typescript: "TypeScript",
-    html: "HTML",
-    css: "CSS",
-    json: "JSON",
-    c: "C",
-    cpp: "C++",
-    java: "Java",
-    mysql: "MySQL",
-  };
-  return languageNames[language] || language;
-};
+// Language definitions with enabled status
+const LANGUAGES = [
+  { label: "Python", value: "python", enabled: true },
+  { label: "JavaScript (Node.js)", value: "javascript", enabled: true },
+  { label: "C", value: "c", enabled: false },
+  { label: "C++", value: "cpp", enabled: false },
+  { label: "Java", value: "java", enabled: false },
+  { label: "SQL", value: "sql", enabled: false },
+];
 
-// Helper function to check if language is coming soon
-const isLanguageComingSoon = (language: string | undefined): boolean => {
-  return language === "c" || language === "cpp" || language === "mysql";
+// Helper function to get language display name
+const getLanguageDisplayName = (language: string): string => {
+  const lang = LANGUAGES.find(l => l.value === language);
+  return lang ? lang.label : language;
 };
 
 export default function ProjectDetailPage({
@@ -126,34 +121,14 @@ export default function ProjectDetailPage({
     const files = getProjectFiles(params.id);
     setProjectFiles(files);
     
-    // Ensure project has at least one file
-    if (files.length === 0 && loadedProject) {
-      const entryFile = ensureProjectHasFile(params.id, loadedProject.language);
-      setProjectFiles([entryFile]);
-      setActiveFileId(entryFile.id);
-      setCode(entryFile.content);
-    } else if (files.length > 0) {
-      // Java Phase 2: Always use Main.java as entry file (if it exists)
-      if (loadedProject?.language === "java") {
-        const mainJava = files.find(f => f.name === "Main.java");
-        if (mainJava) {
-          setActiveFileId(mainJava.id);
-          setCode(mainJava.content);
-          // Ensure entry file is set to Main.java
-          if (loadedProject.entryFile !== "Main.java") {
-            updateProjectEntryFile(params.id, "Main.java");
-          }
-        } else {
-          // Main.java doesn't exist - use first file but it won't be executable
-          const entryFile = files.find(f => f.isEntry) || files[0];
-          setActiveFileId(entryFile.id);
-          setCode(entryFile.content);
-        }
-      } else {
-        const entryFile = files.find(f => f.isEntry) || files[0];
-        setActiveFileId(entryFile.id);
-        setCode(entryFile.content);
-      }
+    // Set active file - find first non-folder file
+    const firstFile = files.find(f => !f.isFolder);
+    if (firstFile) {
+      setActiveFileId(firstFile.id);
+      setCode(firstFile.content);
+    } else {
+      setActiveFileId(null);
+      setCode("");
     }
     
     // Load JavaScript execution mode preference (default: "node")
@@ -228,6 +203,90 @@ export default function ProjectDetailPage({
       setIsDetectingEntryFile(false);
     }
   }, [project, projectFiles]);
+
+  // Fetch project files from API
+  const fetchProjectFiles = async () => {
+    try {
+      const response = await fetch(`/api/projects/${params.id}/files`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.files) {
+          // Convert API files to CodeFile format and sync to localStorage
+          const codeFiles: CodeFile[] = data.files.map((file: any) => ({
+            id: file.id,
+            name: file.name,
+            content: file.content,
+            isFolder: file.isFolder,
+          }));
+          setProjectFiles(codeFiles);
+          
+          // Also sync to localStorage for backward compatibility
+          codeFiles.forEach(file => {
+            if (!getProjectFileById(params.id, file.id)) {
+              addProjectFile(params.id, file.name, file.content, file.isFolder);
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching project files:", error);
+      // Fallback to localStorage
+      const files = getProjectFiles(params.id);
+      setProjectFiles(files);
+    }
+  };
+
+  // Handle create file
+  const handleCreateFile = async () => {
+    const fileName = prompt("Enter file name (e.g. index.js or main.py)");
+    
+    if (!fileName || !fileName.trim()) return;
+    
+    try {
+      const response = await fetch(`/api/projects/${params.id}/files`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: fileName.trim(),
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create file");
+      }
+      
+      const newFile = await response.json();
+      
+      // Refresh file list from API
+      await fetchProjectFiles();
+      
+      // Set new file as active - find it in updated files
+      const updatedFiles = getProjectFiles(params.id);
+      const createdFile = updatedFiles.find(f => f.id === newFile.id || f.name === newFile.name);
+      if (createdFile) {
+        setActiveFileId(createdFile.id);
+        setCode(createdFile.content || "");
+      } else if (newFile.id) {
+        // If file was created but not found in localStorage, set it directly
+        setActiveFileId(newFile.id);
+        setCode(newFile.content || "");
+        // Add to localStorage
+        addProjectFile(params.id, newFile.name, newFile.content || "", newFile.isFolder || false);
+        setProjectFiles([...projectFiles, {
+          id: newFile.id,
+          name: newFile.name,
+          content: newFile.content || "",
+          isFolder: newFile.isFolder || false,
+        }]);
+      }
+    } catch (error) {
+      console.error("Error creating file:", error);
+      alert(error instanceof Error ? error.message : "Failed to create file");
+    }
+  };
 
   // Auto-detect entry file with AI when project has multiple files
   useEffect(() => {
@@ -1341,7 +1400,7 @@ export default function ProjectDetailPage({
                           </>
                         ) : !isLanguageExecutable(project?.language) ? (
                           <>
-                            ⏳ Coming Soon
+                            Not Available Yet
                           </>
                         ) : project?.language === "c" ? (
                           <>
@@ -1613,18 +1672,16 @@ export default function ProjectDetailPage({
                       }}
                       className="px-2 py-1 text-xs bg-gray-800/50 text-white border border-gray-700 rounded focus:outline-none focus:border-cyan-400"
                     >
-                      <option value="python">Python</option>
-                      <option value="javascript">JavaScript</option>
-                      <option value="c">C (Preview)</option>
-                      <option value="cpp">C++ (Coming Soon)</option>
-                      <option value="java">Java (Preview)</option>
-                      <option value="mysql">MySQL (Coming Soon)</option>
+                      {LANGUAGES.map(lang => (
+                        <option
+                          key={lang.value}
+                          value={lang.value}
+                          disabled={!lang.enabled}
+                        >
+                          {lang.label}{!lang.enabled ? " (Not Available Yet)" : ""}
+                        </option>
+                      ))}
                     </select>
-                    {isLanguageComingSoon(project?.language) && (
-                      <span className="text-xs text-yellow-400 flex items-center gap-1" title="Execution support for this language is coming soon">
-                        ⏳ Preview
-                      </span>
-                    )}
                   </div>
                   
                   {/* JavaScript Execution Mode Selector (only for JavaScript projects) */}
@@ -2195,11 +2252,14 @@ export default function ProjectDetailPage({
                                                     });
                                                     const updatedFiles = getProjectFiles(params.id);
                                                     setProjectFiles(updatedFiles);
-                                                    if (activeFileId === node.file.id) {
-                                                      const newActiveFile = updatedFiles.find(f => !f.isFolder);
-                                                      if (newActiveFile) {
-                                                        setActiveFileId(newActiveFile.id);
-                                                        setCode(newActiveFile.content);
+                                                    
+                                                    // Check if deleted file was active
+                                                    const deletedIds = filesToDelete.map(f => f.id);
+                                                    if (deletedIds.includes(activeFileId || "")) {
+                                                      const remainingFiles = updatedFiles.filter(f => !f.isFolder);
+                                                      if (remainingFiles.length > 0) {
+                                                        setActiveFileId(remainingFiles[0].id);
+                                                        setCode(remainingFiles[0].content);
                                                       } else {
                                                         setActiveFileId(null);
                                                         setCode("");
@@ -2282,11 +2342,13 @@ export default function ProjectDetailPage({
                                                     deleteProjectFile(params.id, node.file.name);
                                                     const updatedFiles = getProjectFiles(params.id);
                                                     setProjectFiles(updatedFiles);
+                                                    
+                                                    // Check if deleted file was active
                                                     if (activeFileId === node.file.id) {
-                                                      const newActiveFile = updatedFiles.find(f => !f.isFolder);
-                                                      if (newActiveFile) {
-                                                        setActiveFileId(newActiveFile.id);
-                                                        setCode(newActiveFile.content);
+                                                      const remainingFiles = updatedFiles.filter(f => !f.isFolder);
+                                                      if (remainingFiles.length > 0) {
+                                                        setActiveFileId(remainingFiles[0].id);
+                                                        setCode(remainingFiles[0].content);
                                                       } else {
                                                         setActiveFileId(null);
                                                         setCode("");
@@ -2326,145 +2388,154 @@ export default function ProjectDetailPage({
                         )}
                       </div>
                     </div>
-                    {/* Line numbers - scrolls with content */}
-                    <div 
-                      ref={lineNumbersRef}
-                      className="flex-shrink-0 bg-gray-800/50 px-3 py-4 text-right select-none border-r border-gray-700/50 overflow-y-auto line-numbers-scrollbar"
-                      style={{ height: '100%' }}
-                      onScroll={(e) => {
-                        // Sync line numbers scroll with code editor
-                        if (codeScrollContainerRef.current) {
-                          codeScrollContainerRef.current.scrollTop = e.currentTarget.scrollTop;
-                        }
-                      }}
-                    >
-                      <div className="text-xs text-gray-500 font-mono leading-6">
-                        {code.split("\n").map((_, i) => {
-                          const lineNum = i + 1;
-                          // Check if line is part of selected step's codeRefs (optional reference)
-                          const selectedStep = selectedStepId ? steps.find(s => s.id === selectedStepId) : null;
-                          const isStepHighlighted = selectedStep?.codeRefs?.some(ref => 
-                            lineNum >= ref.startLine && lineNum <= ref.endLine
-                          );
-                          
-                          return (
-                            <div
-                              key={i}
-                              className={`${
-                                isStepHighlighted ? "text-green-400 font-medium" : ""
-                              }`}
-                            >
-                              {lineNum}
-                            </div>
-                          );
-                        })}
-                        {code.split("\n").length === 0 && <div>1</div>}
-                      </div>
-                    </div>
-                    {/* Code editor container - flex-1 to fill available space */}
-                    <div 
-                      ref={editorContainerRef}
-                      className="flex-1 flex flex-col min-w-0 min-h-0 relative" 
-                      style={{ overflow: 'hidden' }}
-                    >
-                      {/* Scroll container with padding - allows horizontal scroll */}
+                    {/* Line numbers - scrolls with content - only show when file is active */}
+                    {activeFileId && (
                       <div 
-                        ref={codeScrollContainerRef}
-                        className="flex-1 overflow-y-auto overflow-x-auto code-editor-scrollbar min-h-0"
-                        style={{ 
-                          padding: '16px 16px 16px 12px',
-                          boxSizing: 'border-box',
-                          width: '100%'
-                        }}
+                        ref={lineNumbersRef}
+                        className="flex-shrink-0 bg-gray-800/50 px-3 py-4 text-right select-none border-r border-gray-700/50 overflow-y-auto line-numbers-scrollbar"
+                        style={{ height: '100%' }}
                         onScroll={(e) => {
-                          // Sync code editor scroll with line numbers
-                          if (lineNumbersRef.current) {
-                            lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
+                          // Sync line numbers scroll with code editor
+                          if (codeScrollContainerRef.current) {
+                            codeScrollContainerRef.current.scrollTop = e.currentTarget.scrollTop;
                           }
                         }}
                       >
-                        <textarea
-                          ref={codeTextareaRef}
-                          value={code}
-                          onChange={(e) => {
-                            setCode(e.target.value);
-                          }}
-                          readOnly={false}
-                          onSelect={(e) => {
-                            const textarea = e.currentTarget;
-                            const start = textarea.selectionStart;
-                            const end = textarea.selectionEnd;
-                            
-                            if (start !== end) {
-                              // Calculate line numbers from selection
-                              const textBeforeStart = code.substring(0, start);
-                              const textBeforeEnd = code.substring(0, end);
-                              const startLine = textBeforeStart.split("\n").length;
-                              const endLine = textBeforeEnd.split("\n").length;
-                              
-                              setSelectedCodeRange({ start: startLine, end: endLine });
-                            } else {
-                              setSelectedCodeRange(null);
-                            }
-                          }}
-                          placeholder="Write or paste code here..."
-                          className="bg-transparent text-white placeholder-gray-500 text-sm font-mono resize-none focus:outline-none focus:ring-0 focus:ring-offset-0 leading-6"
-                          style={{
-                            tabSize: 2,
-                            width: '100%',
-                            minHeight: '100%',
-                            height: '100%',
-                            lineHeight: '24px',
-                            display: 'block',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                        {/* Step codeRefs highlighting overlay - subtle green (optional reference) */}
-                        {selectedStepId && (() => {
-                          const selectedStep = steps.find(s => s.id === selectedStepId);
-                          if (!selectedStep?.codeRefs || selectedStep.codeRefs.length === 0) return null;
-                          
-                          return selectedStep.codeRefs.map((ref, idx) => {
-                            const codeLines = code.split("\n");
-                            const totalLines = Math.max(codeLines.length, 1);
-                            const adjustedStartLine = Math.min(ref.startLine, totalLines);
-                            const adjustedEndLine = Math.min(ref.endLine, totalLines);
-                            
-                            const lineHeight = 24; // leading-6 = 24px
-                            const paddingTop = 16; // p-4 = 16px
-                            const paddingLeft = 12; // pl-3 = 12px
-                            const topOffset = (adjustedStartLine - 1) * lineHeight + paddingTop;
-                            const height = Math.max((adjustedEndLine - adjustedStartLine + 1) * lineHeight, lineHeight);
+                        <div className="text-xs text-gray-500 font-mono leading-6">
+                          {code.split("\n").map((_, i) => {
+                            const lineNum = i + 1;
+                            // Check if line is part of selected step's codeRefs (optional reference)
+                            const selectedStep = selectedStepId ? steps.find(s => s.id === selectedStepId) : null;
+                            const isStepHighlighted = selectedStep?.codeRefs?.some(ref => 
+                              lineNum >= ref.startLine && lineNum <= ref.endLine
+                            );
                             
                             return (
                               <div
-                                key={idx}
-                                className="absolute pointer-events-none z-5"
-                                style={{
-                                  left: `${paddingLeft}px`,
-                                  right: `${paddingTop}px`,
-                                  top: `${topOffset}px`,
-                                  height: `${height}px`,
-                                  background: "rgba(34, 197, 94, 0.08)",
-                                  borderLeft: "2px solid rgba(34, 197, 94, 0.3)",
-                                  borderRadius: "4px",
-                                  width: `calc(100% - ${paddingLeft + paddingTop}px)`,
-                                  maxWidth: `calc(100% - ${paddingLeft + paddingTop}px)`,
-                                  boxSizing: "border-box",
-                                }}
-                              />
+                                key={i}
+                                className={`${
+                                  isStepHighlighted ? "text-green-400 font-medium" : ""
+                                }`}
+                              >
+                                {lineNum}
+                              </div>
                             );
-                          });
-                        })()}
+                          })}
+                          {code.split("\n").length === 0 && <div>1</div>}
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    {/* Code editor container - flex-1 to fill available space */}
+                    {activeFileId ? (() => {
+                      const activeFile = getProjectFileById(params.id, activeFileId);
+                      return activeFile ? (
+                        <div 
+                          ref={editorContainerRef}
+                          className="flex-1 flex flex-col min-w-0 min-h-0 relative" 
+                          style={{ overflow: 'hidden' }}
+                        >
+                          {/* Scroll container with padding - allows horizontal scroll */}
+                          <div 
+                            ref={codeScrollContainerRef}
+                            className="flex-1 overflow-y-auto overflow-x-auto code-editor-scrollbar min-h-0"
+                            style={{ 
+                              padding: '16px 16px 16px 12px',
+                              boxSizing: 'border-box',
+                              width: '100%'
+                            }}
+                            onScroll={(e) => {
+                              // Sync code editor scroll with line numbers
+                              if (lineNumbersRef.current) {
+                                lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
+                              }
+                            }}
+                          >
+                            <textarea
+                              ref={codeTextareaRef}
+                              value={code}
+                              onChange={(e) => {
+                                setCode(e.target.value);
+                              }}
+                              readOnly={false}
+                              onSelect={(e) => {
+                                const textarea = e.currentTarget;
+                                const start = textarea.selectionStart;
+                                const end = textarea.selectionEnd;
+                                
+                                if (start !== end) {
+                                  // Calculate line numbers from selection
+                                  const textBeforeStart = code.substring(0, start);
+                                  const textBeforeEnd = code.substring(0, end);
+                                  const startLine = textBeforeStart.split("\n").length;
+                                  const endLine = textBeforeEnd.split("\n").length;
+                                  
+                                  setSelectedCodeRange({ start: startLine, end: endLine });
+                                } else {
+                                  setSelectedCodeRange(null);
+                                }
+                              }}
+                              placeholder="Write or paste code here..."
+                              className="bg-transparent text-white placeholder-gray-500 text-sm font-mono resize-none focus:outline-none focus:ring-0 focus:ring-offset-0 leading-6"
+                              style={{
+                                tabSize: 2,
+                                width: '100%',
+                                minHeight: '100%',
+                                height: '100%',
+                                lineHeight: '24px',
+                                display: 'block',
+                                boxSizing: 'border-box',
+                              }}
+                            />
+                            {/* Step codeRefs highlighting overlay - subtle green (optional reference) */}
+                            {selectedStepId && (() => {
+                              const selectedStep = steps.find(s => s.id === selectedStepId);
+                              if (!selectedStep?.codeRefs || selectedStep.codeRefs.length === 0) return null;
+                              
+                              return selectedStep.codeRefs.map((ref, idx) => {
+                                const codeLines = code.split("\n");
+                                const totalLines = Math.max(codeLines.length, 1);
+                                const adjustedStartLine = Math.min(ref.startLine, totalLines);
+                                const adjustedEndLine = Math.min(ref.endLine, totalLines);
+                                
+                                const lineHeight = 24; // leading-6 = 24px
+                                const paddingTop = 16; // p-4 = 16px
+                                const paddingLeft = 12; // pl-3 = 12px
+                                const topOffset = (adjustedStartLine - 1) * lineHeight + paddingTop;
+                                const height = Math.max((adjustedEndLine - adjustedStartLine + 1) * lineHeight, lineHeight);
+                                
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="absolute pointer-events-none z-5"
+                                    style={{
+                                      left: `${paddingLeft}px`,
+                                      right: `${paddingTop}px`,
+                                      top: `${topOffset}px`,
+                                      height: `${height}px`,
+                                      background: "rgba(34, 197, 94, 0.08)",
+                                      borderLeft: "2px solid rgba(34, 197, 94, 0.3)",
+                                      borderRadius: "4px",
+                                      width: `calc(100% - ${paddingLeft + paddingTop}px)`,
+                                      maxWidth: `calc(100% - ${paddingLeft + paddingTop}px)`,
+                                      boxSizing: "border-box",
+                                    }}
+                                  />
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      ) : null;
+                    })() : (
+                      <EmptyState 
+                        onCreateFile={handleCreateFile}
+                      />
+                    )}
                   </div>
                 ) : (
-                  <div className="p-4 min-h-[480px] flex items-center justify-center flex-1">
-                    <p className="text-gray-500 text-sm text-center">
-                      No files yet. Create a file to start coding.
-                    </p>
-                  </div>
+                  <EmptyState 
+                    onCreateFile={handleCreateFile}
+                  />
                 )}
               </div>
             </div>
@@ -2528,8 +2599,8 @@ export default function ProjectDetailPage({
                           return phase === 3 
                             ? "☕ Java Phase 3 (Packages)"
                             : phase === 2
-                            ? "☕ Java Phase 2 (Preview)"
-                            : "☕ Java Phase 1 (Preview)";
+                            ? "☕ Java Phase 2"
+                            : "☕ Java Phase 1";
                         })()
                       : jsExecutionMode === "browser" 
                       ? "🔧 Execution Environment: Browser (Client-side)" 
