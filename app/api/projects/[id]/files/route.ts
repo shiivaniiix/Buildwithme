@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /**
  * Project Files API
  * 
@@ -8,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import { prisma } from "@/lib/prisma";
+import type { File } from "@prisma/client";
 
 /**
  * POST /api/projects/[id]/files
@@ -17,7 +20,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
+): Promise<Response> {
   try {
     // Authenticate user
     const user = await getCurrentUser();
@@ -103,7 +106,7 @@ export async function POST(
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
+): Promise<Response> {
   try {
     // Authenticate user
     const user = await getCurrentUser();
@@ -148,7 +151,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      files: files.map((file) => ({
+      files: files.map((file: File) => ({
         id: file.id,
         projectId: file.projectId,
         name: file.name,
