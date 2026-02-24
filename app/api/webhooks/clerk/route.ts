@@ -10,7 +10,6 @@
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { WebhookEvent } from "@clerk/nextjs/server";
-import type { UserJSON } from "@clerk/types";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 
@@ -65,15 +64,29 @@ export async function POST(req: Request): Promise<Response> {
   const eventType = evt.type;
 
   if (eventType === "user.created" || eventType === "user.updated") {
-    // Safely extract data after narrowing event type
-    const data = evt.data as UserJSON;
-    const { id, email_addresses, first_name, last_name, image_url, username } = data;
+    // Use safe structural narrowing instead of type casting
+    const data = evt.data;
 
-    try {
-      // Get primary email
-      type EmailAddress = { id: string; email_address: string; [key: string]: unknown };
-      const primaryEmail = (email_addresses as EmailAddress[] | undefined)?.find((email: EmailAddress) => email.id === data.primary_email_address_id)?.email_address ||
-                          (email_addresses as EmailAddress[] | undefined)?.[0]?.email_address;
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "email_addresses" in data
+    ) {
+      const {
+        id,
+        email_addresses,
+        first_name,
+        last_name,
+        image_url,
+        username,
+      } = data;
+
+      try {
+        // Get primary email
+        type EmailAddress = { id: string; email_address: string; [key: string]: unknown };
+        const primaryEmailId = "primary_email_address_id" in data && typeof data.primary_email_address_id === "string" ? data.primary_email_address_id : undefined;
+        const primaryEmail = (email_addresses as EmailAddress[] | undefined)?.find((email: EmailAddress) => email.id === primaryEmailId)?.email_address ||
+                            (email_addresses as EmailAddress[] | undefined)?.[0]?.email_address;
 
       if (!primaryEmail) {
         console.error("No email found for user:", id);
