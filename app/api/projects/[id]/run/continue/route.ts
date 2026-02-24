@@ -299,7 +299,7 @@ export async function POST(
       execProcess.stderr?.on("data", stderrHandler);
 
       // Handle process completion - use once() to prevent duplicate handlers
-      execProcess.once("close", async (code) => {
+      execProcess.once("close", async (code: number | null) => {
         clearTimeout(timeoutId);
         processCompleted = true;
         // Remove handlers to prevent any further processing
