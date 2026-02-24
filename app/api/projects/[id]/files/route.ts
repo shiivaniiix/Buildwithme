@@ -10,7 +10,6 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import { prisma } from "@/lib/prisma";
-import type { File } from "@prisma/client";
 
 /**
  * POST /api/projects/[id]/files
@@ -149,9 +148,12 @@ export async function GET(
       },
     });
 
+    // Infer type from Prisma query result
+    type FileType = typeof files[number];
+
     return NextResponse.json({
       success: true,
-      files: files.map((file: File) => ({
+      files: files.map((file: FileType) => ({
         id: file.id,
         projectId: file.projectId,
         name: file.name,
