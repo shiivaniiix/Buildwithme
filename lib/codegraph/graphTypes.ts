@@ -22,7 +22,8 @@ export interface GraphEdge {
 
 export interface DetectedTechnology {
   name: string;
-  category: "language" | "framework" | "runtime" | "tooling";
+  category?: "language" | "framework" | "runtime" | "tooling";
+  description?: string;
 }
 
 
