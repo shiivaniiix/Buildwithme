@@ -107,8 +107,9 @@ async function fetchGitHubFiles(
 
         if (item.type === "file") {
           // Check file size
-          if (item.size > maxFileSize) {
-            console.log(`Skipping file ${item.name}: size ${item.size} exceeds max ${maxFileSize}`);
+          const size = item.size ?? 0;
+          if (size > maxFileSize) {
+            console.log(`Skipping file ${item.name}: size ${size} exceeds max ${maxFileSize}`);
             continue;
           }
 
