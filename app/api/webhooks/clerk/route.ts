@@ -88,47 +88,48 @@ export async function POST(req: Request): Promise<Response> {
         const primaryEmail = (email_addresses as EmailAddress[] | undefined)?.find((email: EmailAddress) => email.id === primaryEmailId)?.email_address ||
                             (email_addresses as EmailAddress[] | undefined)?.[0]?.email_address;
 
-      if (!primaryEmail) {
-        console.error("No email found for user:", id);
-        return new Response("No email found", { status: 400 });
+        if (!primaryEmail) {
+          console.error("No email found for user:", id);
+          return new Response("No email found", { status: 400 });
+        }
+
+        // Combine first and last name
+        const fullName = [first_name, last_name].filter(Boolean).join(" ") || null;
+
+        // Upsert user in database
+        // First check if user exists to preserve existing username
+        const existingUser = await prisma.user.findUnique({
+          where: { clerkId: id },
+          select: { username: true },
+        });
+
+        await prisma.user.upsert({
+          where: {
+            clerkId: id,
+          },
+          update: {
+            email: primaryEmail,
+            name: fullName,
+            imageUrl: image_url || null,
+            // Only update username from Clerk if user doesn't have one set
+            // Once set via app, username is managed in app, not Clerk
+            username: existingUser?.username || username || null,
+          },
+          create: {
+            id: id,
+            clerkId: id,
+            email: primaryEmail,
+            name: fullName,
+            imageUrl: image_url || null,
+            username: username || null, // May be null initially
+          },
+        });
+
+        console.log(`User ${eventType}:`, id);
+      } catch (error) {
+        console.error(`Error processing ${eventType}:`, error);
+        return new Response(`Error processing ${eventType}`, { status: 500 });
       }
-
-      // Combine first and last name
-      const fullName = [first_name, last_name].filter(Boolean).join(" ") || null;
-
-      // Upsert user in database
-      // First check if user exists to preserve existing username
-      const existingUser = await prisma.user.findUnique({
-        where: { clerkId: id },
-        select: { username: true },
-      });
-
-      await prisma.user.upsert({
-        where: {
-          clerkId: id,
-        },
-        update: {
-          email: primaryEmail,
-          name: fullName,
-          imageUrl: image_url || null,
-          // Only update username from Clerk if user doesn't have one set
-          // Once set via app, username is managed in app, not Clerk
-          username: existingUser?.username || username || null,
-        },
-        create: {
-          id: id,
-          clerkId: id,
-          email: primaryEmail,
-          name: fullName,
-          imageUrl: image_url || null,
-          username: username || null, // May be null initially
-        },
-      });
-
-      console.log(`User ${eventType}:`, id);
-    } catch (error) {
-      console.error(`Error processing ${eventType}:`, error);
-      return new Response(`Error processing ${eventType}`, { status: 500 });
     }
   }
 
