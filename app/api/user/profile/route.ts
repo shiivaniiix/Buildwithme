@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
  * 
  * Returns the current user's profile from database
  */
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     const dbUser = await getCurrentUser();
 
@@ -66,7 +66,7 @@ export async function GET() {
  * Updates user's profile (username, name)
  * Validates username uniqueness and format
  */
-export async function PATCH(request: NextRequest) {
+export async function PATCH(request: NextRequest): Promise<Response> {
   try {
     const dbUser = await getCurrentUser();
 

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 
 interface AskAIRequest {
@@ -29,7 +31,7 @@ interface AskAIResponse {
  * AI coding assistant endpoint using OpenAI.
  * Provides explanations, error analysis, and code suggestions.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body: AskAIRequest = await request.json();
     const { question, language, activeFile, files, runtimeError, executionOutput, executionMode } = body;
@@ -135,8 +137,10 @@ Your job is to explain code, explain errors, and suggest fixes when asked.`;
     if (language === "c") {
       // Detect if this is Phase 2 (multi-file) based on files array or error context
       const hasMultipleFiles = files && Array.isArray(files) && files.length > 1;
-      const hasHeaders = files && Array.isArray(files) && files.some((f: any) => f.name && f.name.endsWith(".h"));
-      const errorText = (runtimeError || (executionOutput && typeof executionOutput === "object" && "stderr" in executionOutput ? (executionOutput as any).stderr : "") || question || "").toLowerCase();
+      type FileItem = { name: string; [key: string]: unknown };
+      const hasHeaders = files && Array.isArray(files) && (files as FileItem[]).some((f: FileItem) => f.name && f.name.endsWith(".h"));
+      type ExecutionOutput = { stderr?: string; [key: string]: unknown };
+      const errorText = (runtimeError || (executionOutput && typeof executionOutput === "object" && "stderr" in executionOutput ? (executionOutput as ExecutionOutput).stderr : "") || question || "").toLowerCase();
       const isPhase2 = hasMultipleFiles || hasHeaders || 
                        errorText.includes("multiple") || errorText.includes("header") || 
                        errorText.includes(".h") || errorText.includes("include");
@@ -278,8 +282,14 @@ Your job is to explain code, explain errors, and suggest fixes when asked.`;
           (fixData.notes === null || typeof fixData.notes === "string")
         ) {
           // Validate filesToChange structure
-          const validFiles = fixData.filesToChange.every(
-            (file: any) =>
+          type FileToChange = {
+            filename: string;
+            originalCode: string;
+            fixedCode: string;
+            [key: string]: unknown;
+          };
+          const validFiles = (fixData.filesToChange as FileToChange[]).every(
+            (file: FileToChange) =>
               typeof file === "object" &&
               file !== null &&
               typeof file.filename === "string" &&

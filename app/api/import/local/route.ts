@@ -40,7 +40,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       }
 
       // Get file path from webkitRelativePath or name
-      const filePath = (file as any).webkitRelativePath || file.name;
+      type FileWithWebkitPath = File & { webkitRelativePath?: string };
+      const filePath = (file as FileWithWebkitPath).webkitRelativePath || file.name;
       
       // Extract folder name from first file
       if (!folderName && filePath.includes("/")) {

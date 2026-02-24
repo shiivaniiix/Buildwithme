@@ -1,5 +1,7 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
-import type { CodeGraph } from "@/lib/codegraph/graphTypes";
+import type { CodeGraph, DetectedTechnology } from "@/lib/codegraph/graphTypes";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 
 /**
@@ -10,7 +12,7 @@ import { getCurrentUser } from "@/lib/auth/getCurrentUser";
  * 
  * Protected route: Requires authentication via Clerk
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     // Get current authenticated user
     const user = await getCurrentUser();
@@ -104,7 +106,7 @@ When answering:
     let projectContext = `Project ID: ${projectId}
 Generated at: ${new Date(graph.generatedAt).toISOString()}
 
-Technologies Detected: ${graph.technologies?.map((t: any) => t.name).join(", ") || "None"}
+Technologies Detected: ${graph.technologies?.map((t: DetectedTechnology) => t.name).join(", ") || "None"}
 
 Code Graph Structure:
 ${JSON.stringify({ nodes: graph.nodes.length, edges: graph.edges.length, technologies: graph.technologies }, null, 2)}`;

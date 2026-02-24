@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /**
  * Projects API
  * 
@@ -14,7 +16,7 @@ import { prisma } from "@/lib/prisma";
  * Create a new project
  * Body: { name, sourceType?, githubOwner?, githubRepo? }
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     // Authenticate user
     const user = await getCurrentUser();
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
  * GET /api/projects
  * List all projects for the current user
  */
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     // Authenticate user
     const user = await getCurrentUser();
@@ -103,9 +105,12 @@ export async function GET() {
       },
     });
 
+    // Infer type from Prisma query result
+    type ProjectRecord = typeof projects[number];
+
     return NextResponse.json({
       success: true,
-      projects: projects.map((project) => ({
+      projects: projects.map((project: ProjectRecord) => ({
         id: project.id,
         userId: project.userId,
         name: project.name,

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeProject } from "@/lib/codegraph/analyzer";
 import { saveSnapshot } from "@/lib/codegraph/snapshotManager";
@@ -7,7 +9,7 @@ import { saveSnapshot } from "@/lib/codegraph/snapshotManager";
  * 
  * Analyzes project structure and generates code graph.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = await request.json();
     const { projectId, files, fileSummaries } = body;
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file paths are strings
-    if (!files.every(f => typeof f === "string")) {
+    if (!files.every((f: string) => typeof f === "string")) {
       return NextResponse.json(
         { error: "All file paths must be strings" },
         { status: 400 }

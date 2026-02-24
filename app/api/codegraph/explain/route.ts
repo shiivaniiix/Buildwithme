@@ -1,5 +1,7 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
-import type { CodeGraph } from "@/lib/codegraph/graphTypes";
+import type { CodeGraph, DetectedTechnology } from "@/lib/codegraph/graphTypes";
 
 /**
  * Technology deep link mappings
@@ -33,7 +35,7 @@ function getTechnologyDeepLink(technologyName: string): string {
  * 
  * Generates AI-powered architecture explanation from code graph.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = await request.json();
     const { projectId, graph } = body;
@@ -192,7 +194,7 @@ ${JSON.stringify(graph, null, 2)}`;
         Array.isArray(parsed.technologies)
       ) {
         // Add deep links to technologies
-        const technologiesWithLinks = parsed.technologies.map((tech: any) => ({
+        const technologiesWithLinks = (parsed.technologies as DetectedTechnology[]).map((tech: DetectedTechnology) => ({
           name: tech.name || "",
           description: tech.description || "",
           deepLink: getTechnologyDeepLink(tech.name || ""),

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import type { CodeGraph } from "@/lib/codegraph/graphTypes";
+import type { CodeGraph, GraphNode, DetectedTechnology } from "@/lib/codegraph/graphTypes";
 
 /**
  * POST /api/architecture/compare
@@ -55,21 +55,22 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     // Detect changes
+    // Type-safe node filtering - nodes are from CodeGraph type
     const currentFilePaths = new Set(
-      currentGraph.nodes.filter((n: any) => n.type === "file").map((n: any) => n.path)
+      (currentGraph.nodes as GraphNode[]).filter((n: GraphNode) => n.type === "file").map((n: GraphNode) => n.path)
     );
     const historicalFilePaths = new Set(
-      historicalGraph.nodes.filter((n: any) => n.type === "file").map((n: any) => n.path)
+      (historicalGraph.nodes as GraphNode[]).filter((n: GraphNode) => n.type === "file").map((n: GraphNode) => n.path)
     );
 
-    const addedFiles = Array.from(currentFilePaths).filter(path => !historicalFilePaths.has(path));
-    const removedFiles = Array.from(historicalFilePaths).filter(path => !currentFilePaths.has(path));
+    const addedFiles = Array.from(currentFilePaths).filter((path: string) => !historicalFilePaths.has(path));
+    const removedFiles = Array.from(historicalFilePaths).filter((path: string) => !currentFilePaths.has(path));
 
     const currentTechs = new Set<string>(
-      (currentGraph.technologies || []).map((t: any) => t.name)
+      ((currentGraph.technologies || []) as DetectedTechnology[]).map((t: DetectedTechnology) => t.name)
     );
     const historicalTechs = new Set<string>(
-      (historicalGraph.technologies || []).map((t: any) => t.name)
+      ((historicalGraph.technologies || []) as DetectedTechnology[]).map((t: DetectedTechnology) => t.name)
     );
 
     const addedTechs: string[] = Array.from(currentTechs).filter(tech => !historicalTechs.has(tech));

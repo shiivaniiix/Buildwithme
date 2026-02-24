@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import type { CodeGraph } from "@/lib/codegraph/graphTypes";
 
@@ -6,7 +8,7 @@ import type { CodeGraph } from "@/lib/codegraph/graphTypes";
  * 
  * Answers questions about the code graph using AI.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = await request.json();
     const { projectId, graph, question, fileSummaries } = body;

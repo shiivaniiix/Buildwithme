@@ -42,7 +42,7 @@ type ProjectWithFiles = {
 export async function POST(
   request: NextRequest,
   context: { params: { id: string } }
-) {
+): Promise<Response> {
   const { id: projectId } = context.params;
 
   try {

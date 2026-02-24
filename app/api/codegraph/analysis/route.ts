@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeProject } from "@/lib/codegraph/analyzer";
 import { saveSnapshot } from "@/lib/codegraph/snapshotManager";
@@ -8,7 +10,7 @@ import type { CodeGraph } from "@/lib/codegraph/graphTypes";
  * 
  * Returns saved analysis for a project.
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<Response> {
   try {
     const searchParams = request.nextUrl.searchParams;
     const projectId = searchParams.get("projectId");
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
  * Triggers new analysis and saves it.
  * Body: { projectId, files, fileSummaries?, forceReanalyze? }
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = await request.json();
     const { projectId, files, fileSummaries, forceReanalyze } = body;

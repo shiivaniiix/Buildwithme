@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeProject } from "@/lib/codegraph/analyzer";
 
@@ -6,7 +8,7 @@ import { analyzeProject } from "@/lib/codegraph/analyzer";
  * 
  * Fetches project structure at a specific commit and generates architecture snapshot.
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<Response> {
   try {
     const searchParams = request.nextUrl.searchParams;
     const owner = searchParams.get("owner");
@@ -56,20 +58,27 @@ export async function GET(request: NextRequest) {
 
     const filePaths: string[] = [];
     
+    type GitHubTreeItem = {
+      type: string;
+      path?: string;
+      [key: string]: unknown;
+    };
+
     if (treeData.tree && Array.isArray(treeData.tree)) {
-      for (const item of treeData.tree) {
+      const treeItems = treeData.tree as GitHubTreeItem[];
+      for (const item of treeItems) {
         // Only include files (type === "blob")
         if (item.type === "blob" && item.path) {
           // Check if path should be ignored
-          const shouldIgnore = ignoredDirs.some(ignored => 
-            item.path.includes(`/${ignored}/`) || item.path.startsWith(`${ignored}/`)
+          const shouldIgnore = ignoredDirs.some((ignored: string) => 
+            item.path!.includes(`/${ignored}/`) || item.path!.startsWith(`${ignored}/`)
           );
           
           if (shouldIgnore) continue;
 
           // Check if file has valid extension
-          const hasValidExtension = validExtensions.some(ext => 
-            item.path.toLowerCase().endsWith(ext)
+          const hasValidExtension = validExtensions.some((ext: string) => 
+            item.path!.toLowerCase().endsWith(ext)
           );
 
           if (hasValidExtension || item.path.includes(".")) {

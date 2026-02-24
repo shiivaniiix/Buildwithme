@@ -59,7 +59,7 @@ function getPythonSitePaths(pythonCommand: string): Promise<string> {
     });
 
     let pathOutput = "";
-    siteProcess.stdout.on("data", (data) => {
+    siteProcess.stdout.on("data", (data: Buffer) => {
       pathOutput += data.toString();
     });
 
@@ -100,11 +100,11 @@ async function checkPackageInstalled(packageName: string, pythonCommand: string)
     });
 
     let stderr = "";
-    checkProcess.stderr.on("data", (data) => {
+    checkProcess.stderr.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
-    checkProcess.on("close", (code) => {
+    checkProcess.on("close", (code: number | null) => {
       resolve(code === 0);
     });
 
@@ -139,15 +139,15 @@ function installPackages(packages: string[], pythonCommand: string): Promise<{ s
     let stdout = "";
     let stderr = "";
 
-    installProcess.stdout.on("data", (data) => {
+    installProcess.stdout.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    installProcess.stderr.on("data", (data) => {
+    installProcess.stderr.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
-    installProcess.on("close", (code) => {
+    installProcess.on("close", (code: number | null) => {
       if (code === 0) {
         resolve({ success: true });
       } else {
@@ -158,7 +158,7 @@ function installPackages(packages: string[], pythonCommand: string): Promise<{ s
       }
     });
 
-    installProcess.on("error", (error) => {
+    installProcess.on("error", (error: Error) => {
       resolve({ 
         success: false, 
         error: `Failed to run pip: ${error.message}` 
@@ -199,12 +199,12 @@ async function verifyPackagesInstalled(pythonCommand: string): Promise<boolean> 
     });
 
     let stderr = "";
-    verifyProcess.stderr.on("data", (data) => {
+    verifyProcess.stderr.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
     return new Promise((resolve) => {
-      verifyProcess.on("close", (code) => {
+      verifyProcess.on("close", (code: number | null) => {
         resolve(code === 0);
       });
 
@@ -236,11 +236,11 @@ function getPythonUserSitePackages(pythonCommand: string): Promise<string | null
     });
 
     let stdout = "";
-    siteProcess.stdout.on("data", (data) => {
+    siteProcess.stdout.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    siteProcess.on("close", (code) => {
+    siteProcess.on("close", (code: number | null) => {
       if (code === 0 && stdout.trim()) {
         resolve(stdout.trim());
       } else {

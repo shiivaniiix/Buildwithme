@@ -1,12 +1,14 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
-import type { CodeGraph } from "@/lib/codegraph/graphTypes";
+import type { CodeGraph, DetectedTechnology } from "@/lib/codegraph/graphTypes";
 
 /**
  * POST /api/codegraph/chat
  * 
  * Conversational chat about a code graph with conversation history.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = await request.json();
     const { projectId, graph, fileSummaries, messages, newQuestion } = body;
@@ -91,7 +93,7 @@ When answering:
     let projectContext = `Project ID: ${projectId}
 Generated at: ${new Date(graph.generatedAt).toISOString()}
 
-Technologies Detected: ${graph.technologies?.map((t: any) => t.name).join(", ") || "None"}
+Technologies Detected: ${graph.technologies?.map((t: DetectedTechnology) => t.name).join(", ") || "None"}
 
 Code Graph Structure:
 ${JSON.stringify({ nodes: graph.nodes.length, edges: graph.edges.length, technologies: graph.technologies }, null, 2)}`;

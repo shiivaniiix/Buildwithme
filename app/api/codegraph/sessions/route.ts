@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 
 /**
@@ -5,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
  * 
  * Returns chat sessions for a project analysis.
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<Response> {
   try {
     const searchParams = request.nextUrl.searchParams;
     const analysisId = searchParams.get("analysisId");

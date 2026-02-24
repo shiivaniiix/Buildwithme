@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 
 /**
@@ -5,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
  * 
  * Fetches commit history from GitHub repository.
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<Response> {
   try {
     const searchParams = request.nextUrl.searchParams;
     const owner = searchParams.get("owner");
@@ -42,10 +44,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const commits = await response.json();
+    type GitHubCommit = {
+      sha: string;
+      commit: {
+        author: { date: string; name: string };
+        message: string;
+      };
+      [key: string]: unknown;
+    };
+
+    const commits = await response.json() as GitHubCommit[];
 
     // Transform to our format
-    const formattedCommits = commits.map((commit: any) => ({
+    const formattedCommits = commits.map((commit: GitHubCommit) => ({
       sha: commit.sha,
       date: commit.commit.author.date,
       message: commit.commit.message.split("\n")[0], // First line only

@@ -1,5 +1,12 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { detectProjectLanguage } from "@/lib/languageDetection";
+
+type GitHubFile = {
+  name: string;
+  content: string;
+};
 
 /**
  * Recursively fetch files from GitHub repository using Contents API
@@ -48,8 +55,8 @@ async function fetchGitHubFiles(
     if (items.type === "file") {
       // Check if should be ignored
       const pathParts = path.split("/");
-      const shouldIgnore = pathParts.some(part => 
-        ignoredDirs.some(ignored => part === ignored || part.startsWith(ignored))
+      const shouldIgnore = pathParts.some((part: string) => 
+        ignoredDirs.some((ignored: string) => part === ignored || part.startsWith(ignored))
       );
       if (shouldIgnore) return files;
 
@@ -75,13 +82,22 @@ async function fetchGitHubFiles(
     }
 
     // Handle directory response
+    type GitHubContentItem = {
+      type: string;
+      name: string;
+      size?: number;
+      download_url?: string;
+      [key: string]: unknown;
+    };
+
     if (Array.isArray(items)) {
-      console.log(`Processing directory with ${items.length} items`);
-      for (const item of items) {
+      const contentItems = items as GitHubContentItem[];
+      console.log(`Processing directory with ${contentItems.length} items`);
+      for (const item of contentItems) {
         if (files.length >= maxFiles) break;
 
         // Check if directory should be ignored
-        const shouldIgnore = ignoredDirs.some(ignored => 
+        const shouldIgnore = ignoredDirs.some((ignored: string) => 
           item.name === ignored || item.name.startsWith(ignored)
         );
         if (shouldIgnore) {
@@ -159,7 +175,7 @@ async function fetchGitHubFiles(
  * Imports a public GitHub repository as a project.
  * Only public repositories are allowed.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = await request.json();
     const { repoUrl } = body;
@@ -247,7 +263,12 @@ export async function POST(request: NextRequest) {
         maxFileSize
       );
 
-      console.log("Extracted file paths:", files.map(f => f.name));
+      type GitHubFile = {
+        name: string;
+        content: string;
+      };
+
+      console.log("Extracted file paths:", files.map((f: GitHubFile) => f.name));
       console.log("Total files found:", files.length);
 
       if (files.length === 0) {
@@ -258,7 +279,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log("Filtered valid files:", files.map(f => ({ name: f.name, size: f.content.length })));
+      console.log("Filtered valid files:", files.map((f: GitHubFile) => ({ name: f.name, size: f.content.length })));
 
       // Identify key files for content analysis
       const keyFilePatterns = [
@@ -266,13 +287,13 @@ export async function POST(request: NextRequest) {
         "package.json", "pom.xml", "build.gradle"
       ];
       
-      const filePaths = files.map(f => f.name);
+      const filePaths = files.map((f: GitHubFile) => f.name);
       const fileSummaries: Record<string, string> = {};
       
       // Fetch content for key files only
       for (const filePath of filePaths) {
         const fileName = filePath.split("/").pop() || filePath;
-        const isKeyFile = keyFilePatterns.some(pattern => 
+        const isKeyFile = keyFilePatterns.some((pattern: string) => 
           fileName.toLowerCase() === pattern.toLowerCase() || 
           filePath.toLowerCase().endsWith(pattern.toLowerCase())
         );
@@ -280,7 +301,7 @@ export async function POST(request: NextRequest) {
         if (isKeyFile) {
           try {
             // Find the file in the files array
-            const file = files.find(f => f.name === filePath);
+            const file = files.find((f: GitHubFile) => f.name === filePath);
             if (file) {
               const content = file.content;
               const sizeKB = content.length / 1024;

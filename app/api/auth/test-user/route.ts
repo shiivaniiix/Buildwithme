@@ -12,7 +12,7 @@
 import { NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth/getOrCreateUser";
 
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     const result = await getOrCreateUser();
 

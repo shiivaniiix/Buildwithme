@@ -13,7 +13,7 @@ import { WebhookEvent } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   // Get the Svix headers for verification
   const headerPayload = await headers();
   const svix_id = headerPayload.get("svix-id");
@@ -67,8 +67,9 @@ export async function POST(req: Request) {
   if (eventType === "user.created" || eventType === "user.updated") {
     try {
       // Get primary email
-      const primaryEmail = email_addresses?.find((email: any) => email.id === evt.data.primary_email_address_id)?.email_address ||
-                          email_addresses?.[0]?.email_address;
+      type EmailAddress = { id: string; email_address: string; [key: string]: unknown };
+      const primaryEmail = (email_addresses as EmailAddress[] | undefined)?.find((email: EmailAddress) => email.id === evt.data.primary_email_address_id)?.email_address ||
+                          (email_addresses as EmailAddress[] | undefined)?.[0]?.email_address;
 
       if (!primaryEmail) {
         console.error("No email found for user:", id);
