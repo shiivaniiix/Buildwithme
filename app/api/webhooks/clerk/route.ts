@@ -10,6 +10,7 @@
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { WebhookEvent } from "@clerk/nextjs/server";
+import type { UserJSON } from "@clerk/types";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 
@@ -62,13 +63,16 @@ export async function POST(req: Request): Promise<Response> {
 
   // Handle the webhook
   const eventType = evt.type;
-  const { id, email_addresses, first_name, last_name, image_url, username } = evt.data;
 
   if (eventType === "user.created" || eventType === "user.updated") {
+    // Safely extract data after narrowing event type
+    const data = evt.data as UserJSON;
+    const { id, email_addresses, first_name, last_name, image_url, username } = data;
+
     try {
       // Get primary email
       type EmailAddress = { id: string; email_address: string; [key: string]: unknown };
-      const primaryEmail = (email_addresses as EmailAddress[] | undefined)?.find((email: EmailAddress) => email.id === evt.data.primary_email_address_id)?.email_address ||
+      const primaryEmail = (email_addresses as EmailAddress[] | undefined)?.find((email: EmailAddress) => email.id === data.primary_email_address_id)?.email_address ||
                           (email_addresses as EmailAddress[] | undefined)?.[0]?.email_address;
 
       if (!primaryEmail) {
