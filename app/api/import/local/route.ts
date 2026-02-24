@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { detectProjectLanguage } from "@/lib/languageDetection";
 
@@ -6,7 +8,7 @@ import { detectProjectLanguage } from "@/lib/languageDetection";
  * 
  * Imports a local folder (uploaded as files) as a project.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
@@ -47,8 +49,8 @@ export async function POST(request: NextRequest) {
 
       // Check if file should be ignored
       const pathParts = filePath.split("/");
-      const shouldIgnore = pathParts.some(part => 
-        ignoredDirs.some(ignored => part === ignored || part.startsWith(ignored))
+      const shouldIgnore = pathParts.some((part: string) => 
+        ignoredDirs.some((ignored: string) => part === ignored || part.startsWith(ignored))
       );
       if (shouldIgnore) continue;
 
